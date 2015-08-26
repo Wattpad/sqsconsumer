@@ -13,8 +13,9 @@ import (
 	"net/http"
 	"runtime"
 
+	"sync"
+
 	"github.com/Wattpad/sqsconsumer"
-	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/expvar"
 	"golang.org/x/net/context"
 )
@@ -28,12 +29,14 @@ func init() {
 
 func main() {
 	region := "us-east-1"
-	queueName := "push_gcm"
+	queueName := "example_queue"
 	numFetchers := 1
 	numHandlers := 3
 
 	// set up an SQS service instance
-	s, err := sqsconsumer.SQSServiceForRegionAndQueue(region, queueName)
+	// note that you can modify the AWS config used - make your own sqsconsumer.AWSConfigOption
+	// or just depend on ~/.aws/... or environment variables and don't pass any opts at all
+	s, err := sqsconsumer.SQSServiceForQueue(queueName, sqsconsumer.OptAWSRegion(region))
 	if err != nil {
 		log.Printf("Could not set up queue '%s': %s", queueName, err)
 		os.Exit(1)
@@ -49,12 +52,12 @@ func main() {
 		cancelFetch()
 	}()
 
-	// set up metrics
+	// set up metrics - note TrackMetrics does not run the http server, and uses expvar
 	exposeMetrics()
 	ms := fmt.Sprintf("%s.success", queueName)
 	mf := fmt.Sprintf("%s.fail", queueName)
 	mt := fmt.Sprintf("%s.time", queueName)
-	track := sqsconsumer.TrackMetricsMiddleware(ms, mf, mt)
+	track := sqsconsumer.TrackMetrics(ms, mf, mt)
 
 	// set up middleware stack
 	delCtx, cancelDelete := context.WithCancel(context.Background())
@@ -67,26 +70,29 @@ func main() {
 	// start the consumers
 	log.Println("Starting queue consumers")
 
-	e := make(chan error)
+	wg := &sync.WaitGroup{}
+	wg.Add(numFetchers)
 	for i := 0; i < numFetchers; i++ {
 		go func() {
 			// create the consumer and bind it to a queue and processor function
 			c := sqsconsumer.NewConsumer(s, handler)
 
 			// start running the consumer with a context that will be cancelled when a graceful shutdown is requested
-			e <- c.Run(fetchCtx)
+			c.Run(fetchCtx)
+
+			wg.Done()
 		}()
 	}
 
 	// wait for all the consumers to exit cleanly
-	for i := 0; i < numFetchers; i++ {
-		<-e
-	}
+	wg.Wait()
+
+	// and only then shut down the deleter
 	cancelDelete()
 	log.Println("Shutdown complete")
 }
 
-// processMessage is an example processor function which randomly errors or delays processing and demonstrates using the context
+// processMessage is an example processor function which randomly errors or delays processing and demonstrates using the context.
 func processMessage(ctx context.Context, msg string) error {
 	log.Printf("Starting processMessage for msg %s", msg)
 
@@ -112,30 +118,20 @@ func processMessage(ctx context.Context, msg string) error {
 	return nil
 }
 
+// exposeMetrics adds expvar metrics updated every 5 seconds and runs the HTTP server to expose them.
 func exposeMetrics() {
-	v := exposed{
-		goroutines: expvar.NewGauge("total_goroutines"),
-		uptime:     expvar.NewGauge("process_uptime_seconds"),
-	}
+	goroutines := expvar.NewGauge("total_goroutines")
+	uptime := expvar.NewGauge("process_uptime_seconds")
 
 	start := time.Now()
 
 	go func() {
 		for range time.Tick(5 * time.Second) {
-			v.goroutines.Set(float64(runtime.NumGoroutine()))
-			v.uptime.Set(time.Since(start).Seconds())
+			goroutines.Set(float64(runtime.NumGoroutine()))
+			uptime.Set(time.Since(start).Seconds())
 		}
 	}()
 
-	log.Println("HTTP expvars on port 8123")
-	go http.ListenAndServe("localhost:8123", nil)
-}
-
-type exposed struct {
-	// static
-	version *string
-
-	// dynamic
-	goroutines metrics.Gauge
-	uptime     metrics.Gauge
+	log.Println("Expvars at http://localhost:8123/debug/vars")
+	go http.ListenAndServe(":8123", nil)
 }

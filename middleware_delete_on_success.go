@@ -21,7 +21,7 @@ type deleteQueue struct {
 	accumulationTimeout time.Duration
 }
 
-// SQSBatchDeleteOnSuccessWithTimeout decorates a MessageHandler to delete the message if processing succeeded
+// SQSBatchDeleteOnSuccessWithTimeout decorates a MessageHandler to delete the message if processing succeeded.
 func SQSBatchDeleteOnSuccessWithTimeout(ctx context.Context, s *SQSService, after time.Duration) MessageHandlerDecorator {
 	dq := &deleteQueue{
 		svc:                 s.Svc,
@@ -68,7 +68,7 @@ func (dq *deleteQueue) addToPendingDeletes(msg *sqs.Message) {
 	})
 }
 
-// deleteBatch deletes up to 10 messages and returns the list of messages that failed to delete or an error for overall failure
+// deleteBatch deletes up to 10 messages and returns the list of messages that failed to delete or an error for overall failure.
 func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) ([]*sqs.DeleteMessageBatchRequestEntry, error) {
 	req := &sqs.DeleteMessageBatchInput{
 		QueueURL: dq.url,
@@ -94,14 +94,17 @@ func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) (
 	return failed, nil
 }
 
-// deleteFromPending returns the number of messages deleted
+// AWS limits batch sizes to 10 messages
+const deleteBatchSizeLimit = 10
+
+// deleteFromPending returns the number of messages deleted.
 func (dq *deleteQueue) deleteFromPending() int {
 	dq.Lock()
 	defer dq.Unlock()
 
 	n := len(dq.entries)
-	if n > batchSizeLimit {
-		n = batchSizeLimit
+	if n > deleteBatchSizeLimit {
+		n = deleteBatchSizeLimit
 	}
 	fails, err := dq.deleteBatch(dq.entries[:n])
 	if err != nil {
@@ -138,7 +141,7 @@ func (dq *deleteQueue) start(ctx context.Context) {
 			dq.Lock()
 			n := len(dq.entries)
 			dq.Unlock()
-			if n >= batchSizeLimit {
+			if n >= deleteBatchSizeLimit {
 				dq.deleteFromPending()
 			}
 		case <-time.After(dq.accumulationTimeout):
@@ -151,7 +154,3 @@ func (dq *deleteQueue) start(ctx context.Context) {
 		}
 	}
 }
-
-const (
-	batchSizeLimit = 10
-)

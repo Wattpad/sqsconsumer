@@ -10,56 +10,61 @@ import (
 	"golang.org/x/net/context"
 )
 
-// SQSVisibilityExtender decorates a MessageHandler to periodically extend the visibility timeout until the handler is done
-func SQSVisibilityExtender(s *SQSService, opts ...VisibilityExtenderOption) MessageHandlerDecorator {
+// SQSVisibilityTimeoutExtender decorates a MessageHandler to periodically extend the visibility timeout until the handler is done
+func SQSVisibilityTimeoutExtender(s *SQSService, opts ...VisibilityTimeoutExtenderOption) MessageHandlerDecorator {
 	return func(fn MessageHandlerFunc) MessageHandlerFunc {
-		extender := newDefaultVisibilityExtender(s, fn, opts...)
+		extender := newDefaultVisibilityTimeoutExtender(s, fn, opts...)
 		return extender.messageHandlerFunc
 	}
 }
 
-// VisibilityExtenderOption is an option that can be applied to an SQSVisibilityExtender
-type VisibilityExtenderOption func(*visibilityExtender)
+// VisibilityTimeoutExtenderOption is an option that can be applied to an SQSVisibilityTimeoutExtender
+type VisibilityTimeoutExtenderOption func(*visibilityTimeoutExtender)
 
-// OptEveryDuration modifies an SQSVisibilityExtender by changing the frequency of updating the extension
-func OptEveryDuration(d time.Duration) VisibilityExtenderOption {
-	return func(ve *visibilityExtender) {
+// OptEveryDuration modifies an SQSVisibilityTimeoutExtender by changing the frequency of updating the extension
+func OptEveryDuration(d time.Duration) VisibilityTimeoutExtenderOption {
+	return func(ve *visibilityTimeoutExtender) {
 		ve.every = d
 	}
 }
 
-// OptExtensionSecs modifies an SQSVisibilityExtender by changing the length of the requested extension
-func OptExtensionSecs(s int64) VisibilityExtenderOption {
-	return func(ve *visibilityExtender) {
+// OptExtensionSecs modifies an SQSVisibilityTimeoutExtender by changing the length of the requested extension
+func OptExtensionSecs(s int64) VisibilityTimeoutExtenderOption {
+	return func(ve *visibilityTimeoutExtender) {
 		ve.extensionSecs = s
 	}
 }
 
-type visibilityExtender struct {
+type visibilityTimeoutExtender struct {
 	srv           *SQSService
 	every         time.Duration
 	extensionSecs int64
 	next          MessageHandlerFunc
 }
 
-func newDefaultVisibilityExtender(s *SQSService, fn MessageHandlerFunc, opts ...VisibilityExtenderOption) *visibilityExtender {
-	ve := &visibilityExtender{
+const (
+	defaultVisibilityTimeoutExtenderFrequency = 25 * time.Second
+	defaultVisibilityTimeoutExtensionSeconds  = 30
+)
+
+func newDefaultVisibilityTimeoutExtender(s *SQSService, fn MessageHandlerFunc, opts ...VisibilityTimeoutExtenderOption) *visibilityTimeoutExtender {
+	ve := &visibilityTimeoutExtender{
 		srv:           s,
-		every:         25 * time.Second,
-		extensionSecs: 30,
+		every:         defaultVisibilityTimeoutExtenderFrequency,
+		extensionSecs: defaultVisibilityTimeoutExtensionSeconds,
 		next:          fn,
 	}
 	ve.applyOpts(opts...)
 	return ve
 }
 
-func (ve *visibilityExtender) applyOpts(opts ...VisibilityExtenderOption) {
+func (ve *visibilityTimeoutExtender) applyOpts(opts ...VisibilityTimeoutExtenderOption) {
 	for _, o := range opts {
 		o(ve)
 	}
 }
 
-func (ve *visibilityExtender) messageHandlerFunc(ctx context.Context, msg string) error {
+func (ve *visibilityTimeoutExtender) messageHandlerFunc(ctx context.Context, msg string) error {
 	ticker := time.NewTicker(ve.every)
 	done := make(chan struct{})
 	go func() {
@@ -88,7 +93,7 @@ func (ve *visibilityExtender) messageHandlerFunc(ctx context.Context, msg string
 	return err
 }
 
-func (ve *visibilityExtender) extendVisibilityTimeout(msg *sqs.Message) bool {
+func (ve *visibilityTimeoutExtender) extendVisibilityTimeout(msg *sqs.Message) bool {
 	log.Println("Extending visibility timeout for message", aws.StringValue(msg.MessageID))
 	p := &sqs.ChangeMessageVisibilityInput{
 		QueueURL:          ve.srv.URL,
@@ -97,7 +102,7 @@ func (ve *visibilityExtender) extendVisibilityTimeout(msg *sqs.Message) bool {
 	}
 	_, err := ve.srv.Svc.ChangeMessageVisibility(p)
 	if err != nil {
-		log.Println("Failed to extend visibility for message", aws.StringValue(msg.MessageID))
+		log.Println("Failed to extend visibility timeout for message", aws.StringValue(msg.MessageID))
 		return false
 	}
 

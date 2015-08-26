@@ -8,11 +8,13 @@ import (
 	"golang.org/x/net/context"
 )
 
-// TrackMetricsMiddleware decorates a MessageHandler to collect metrics about successes, failures and runtime reports in ms*10
-func TrackMetricsMiddleware(successVarName, failureVarName, timingVarName string) MessageHandlerDecorator {
+// TrackMetrics decorates a MessageHandler to collect metrics about successes, failures and runtime reports in ms*10.
+func TrackMetrics(successVarName, failureVarName, timingVarName string) MessageHandlerDecorator {
 	successes := expvar.NewCounter(successVarName)
 	failures := expvar.NewCounter(failureVarName)
-	h := expvar.NewHistogram(timingVarName, 0, 100000, 3, 1, 5, 50, 95, 99)
+
+	// histogram from 0-100000ms with 3 sigfigs tracking 50, 95 and 99 %iles
+	h := expvar.NewHistogram(timingVarName, 0, 100000, 3, 50, 95, 99)
 
 	timing := metrics.NewTimeHistogram(time.Millisecond, h)
 

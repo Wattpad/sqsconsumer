@@ -79,6 +79,52 @@ func TestQueueConsumerRun(t *testing.T) {
 			assert.Equal(t, int64(2), callCount)
 		})
 
+		Convey("Does not fetch many more messages than it can process", func() {
+			m := mock.NewMockSQSAPI(ctl)
+			received := &sqs.ReceiveMessageOutput{
+				Messages: []*sqs.Message{
+					&sqs.Message{MessageID: aws.String("i1"), ReceiptHandle: aws.String("r1")},
+					&sqs.Message{MessageID: aws.String("i2"), ReceiptHandle: aws.String("r2")},
+					&sqs.Message{MessageID: aws.String("i3"), ReceiptHandle: aws.String("r3")},
+					&sqs.Message{MessageID: aws.String("i4"), ReceiptHandle: aws.String("r4")},
+					&sqs.Message{MessageID: aws.String("i5"), ReceiptHandle: aws.String("r5")},
+					&sqs.Message{MessageID: aws.String("i6"), ReceiptHandle: aws.String("r6")},
+					&sqs.Message{MessageID: aws.String("i7"), ReceiptHandle: aws.String("r7")},
+					&sqs.Message{MessageID: aws.String("i8"), ReceiptHandle: aws.String("r8")},
+					&sqs.Message{MessageID: aws.String("i9"), ReceiptHandle: aws.String("r9")},
+					&sqs.Message{MessageID: aws.String("i10"), ReceiptHandle: aws.String("r10")},
+				},
+			}
+
+			// return 10 messages - the first 10 will never finish so the second batch will block and there will be no third request
+			m.EXPECT().ReceiveMessage(gomock.Any()).Return(received, nil).Times(2)
+
+			// hang until cancelled
+			fn := func(ctx context.Context, msg string) error {
+				<-ctx.Done()
+				return nil
+			}
+
+			s := &SQSService{Svc: m}
+			q := NewConsumer(s, fn)
+			q.delayAfterReceiveError = time.Millisecond
+
+			// wait long enough to ensure ReceiveMessage would have been invoked multiple times if it was too greedy
+			ctx, _ := context.WithTimeout(context.Background(), 500*time.Millisecond)
+
+			// record number of goroutines before run to ensure no leaks
+			ngo := runtime.NumGoroutine()
+
+			// run the fetcher
+			q.Run(ctx)
+
+			// ensure no routines were leaked
+			time.Sleep(time.Millisecond)
+			if !assert.Equal(t, ngo, runtime.NumGoroutine(), "Should not leak goroutines") {
+				panic(1)
+			}
+		})
+
 		Convey("Stops gracefully when cancelled", func() {
 			// delay so that the cancel occurs mid-receive
 			delay := func(x interface{}) {
@@ -127,67 +173,6 @@ func TestQueueConsumerRun(t *testing.T) {
 
 			time.Sleep(time.Millisecond) // time for goroutines to end
 			assert.Equal(t, ngo, runtime.NumGoroutine(), "Should not leak goroutines")
-		})
-	})
-}
-
-func TestSetupQueue(t *testing.T) {
-	Convey("SetupQueue()", t, func() {
-		ctl := gomock.NewController(t)
-		defer ctl.Finish()
-
-		name := "fake_queue_name"
-
-		svc := mock.NewMockSQSAPI(ctl)
-
-		Convey("Given SQS will return that the queue already exists", func() {
-			svc.EXPECT().GetQueueURL(&sqs.GetQueueURLInput{QueueName: aws.String(name)}).Return(&sqs.GetQueueURLOutput{QueueURL: aws.String("http://example.com/queue/" + name)}, nil)
-
-			Convey("When SetupQueue is invoked", func() {
-				url, err := SetupQueue(svc, name)
-
-				Convey("Then the result will be a URL that ends with the given queue name", func() {
-					So(*url, ShouldEndWith, "/fake_queue_name")
-				})
-
-				Convey("And no error", func() {
-					So(err, ShouldBeNil)
-				})
-			})
-		})
-
-		Convey("Given SQS creates the new queue successfully", func() {
-			svc.EXPECT().GetQueueURL(gomock.Any()).Return(nil, assert.AnError)
-			svc.EXPECT().CreateQueue(gomock.Any()).Return(&sqs.CreateQueueOutput{QueueURL: aws.String("http://example.com/queue/" + name)}, nil)
-
-			Convey("When SetupQueue is invoked", func() {
-				url, err := SetupQueue(svc, name)
-
-				Convey("Then the result will be a URL that ends with the given queue name", func() {
-					So(*url, ShouldEndWith, "/fake_queue_name")
-				})
-
-				Convey("And no error", func() {
-					So(err, ShouldBeNil)
-				})
-			})
-		})
-
-		Convey("Given SQS returns an error", func() {
-			svc.EXPECT().GetQueueURL(gomock.Any()).Return(nil, assert.AnError)
-			svc.EXPECT().CreateQueue(gomock.Any()).Return(nil, assert.AnError)
-
-			Convey("When SetupQueue is invoked", func() {
-				url, err := SetupQueue(svc, name)
-
-				Convey("Then the result will be a nil URL", func() {
-					So(url, ShouldBeNil)
-				})
-
-				Convey("And a non-nil error", func() {
-					So(err, ShouldNotBeNil)
-				})
-			})
 		})
 	})
 }

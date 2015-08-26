@@ -17,26 +17,26 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestSQSVisibilityExtender(t *testing.T) {
+func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 	// log to /dev/null because the extender is chatty
 	log.SetOutput(ioutil.Discard)
 	defer func() {
 		log.SetOutput(os.Stderr)
 	}()
 
-	Convey("SQSVisibilityExtender", t, func() {
+	Convey("SQSVisibilityTimeoutExtender", t, func() {
 		ctl := gomock.NewController(t)
 		defer ctl.Finish()
 
 		Convey("When created with no options", func() {
 			m := mock.NewMockSQSAPI(ctl)
-			v := newDefaultVisibilityExtender(&SQSService{Svc: m}, noop)
+			v := newDefaultVisibilityTimeoutExtender(&SQSService{Svc: m}, noop)
 
 			Convey("Should default to run every 25 seconds", func() {
 				So(v.every, ShouldEqual, 25*time.Second)
 			})
 
-			Convey("Should default to extend visibility by 30 seconds", func() {
+			Convey("Should default to extend visibility timeout by 30 seconds", func() {
 				So(v.extensionSecs, ShouldEqual, 30)
 			})
 		})
@@ -44,7 +44,7 @@ func TestSQSVisibilityExtender(t *testing.T) {
 		Convey("When created with an OptEveryDuration", func() {
 			duration := 3 * time.Millisecond
 			m := mock.NewMockSQSAPI(ctl)
-			v := newDefaultVisibilityExtender(&SQSService{Svc: m}, noop, OptEveryDuration(duration))
+			v := newDefaultVisibilityTimeoutExtender(&SQSService{Svc: m}, noop, OptEveryDuration(duration))
 
 			Convey("Should use the specified duration", func() {
 				So(v.every, ShouldEqual, duration)
@@ -54,7 +54,7 @@ func TestSQSVisibilityExtender(t *testing.T) {
 		Convey("When created with an OptExtensionSecs", func() {
 			extension := int64(3)
 			m := mock.NewMockSQSAPI(ctl)
-			v := newDefaultVisibilityExtender(&SQSService{Svc: m}, noop, OptExtensionSecs(extension))
+			v := newDefaultVisibilityTimeoutExtender(&SQSService{Svc: m}, noop, OptExtensionSecs(extension))
 
 			Convey("Should use the specified extension", func() {
 				So(v.extensionSecs, ShouldEqual, extension)
@@ -77,8 +77,8 @@ func TestSQSVisibilityExtender(t *testing.T) {
 
 				s := &SQSService{Svc: m, URL: url}
 
-				Convey("And the handler is wrapped in an SQSVisibilityExtender configured to run after 10ms with an extension of 1s", func() {
-					ex := SQSVisibilityExtender(s, OptEveryDuration(10*time.Millisecond), OptExtensionSecs(1))
+				Convey("And the handler is wrapped in an SQSVisibilityTimeoutExtender configured to run after 10ms with an extension of 1s", func() {
+					ex := SQSVisibilityTimeoutExtender(s, OptEveryDuration(10*time.Millisecond), OptExtensionSecs(1))
 
 					Convey("When invoking the wrapped handler with a message and an SQSMessage-enriched context", func() {
 						ctx := sqsmessage.NewContext(context.Background(), msg)
@@ -104,8 +104,8 @@ func TestSQSVisibilityExtender(t *testing.T) {
 				m.EXPECT().ChangeMessageVisibility(gomock.Any()).Times(0)
 				s := &SQSService{Svc: m, URL: aws.String("an_url")}
 
-				Convey("And the handler is wrapped in an SQSVisibilityExtender configured to run after 5ms", func() {
-					ex := SQSVisibilityExtender(s, OptEveryDuration(5*time.Millisecond))
+				Convey("And the handler is wrapped in an SQSVisibilityTimeoutExtender configured to run after 5ms", func() {
+					ex := SQSVisibilityTimeoutExtender(s, OptEveryDuration(5*time.Millisecond))
 
 					Convey("When invoking the wrapped handler that will fail and waiting longer than the extender timeout", func() {
 						msg := &sqs.Message{MessageID: aws.String("i1"), ReceiptHandle: aws.String("r1")}

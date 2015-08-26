@@ -11,55 +11,22 @@ import (
 	"golang.org/x/net/context"
 )
 
-// SQSServiceForRegionAndQueue creates an AWS SQS client configured for the given region and gets or creates a queue with the given name
-func SQSServiceForRegionAndQueue(region, queueName string) (*SQSService, error) {
-	svc := sqs.New(&aws.Config{
-		Region: aws.String(region),
-	})
-	s := &SQSService{Svc: svc}
+const (
+	defaultDeleteBatchTimeout     = 250 * time.Millisecond
+	defaultDelayAfterReceiveError = 5 * time.Second
 
-	var url *string
-	var err error
-	if url, err = SetupQueue(svc, queueName); err != nil {
-		return nil, err
-	}
-	s.URL = url
-
-	return s, nil
-}
+	// AWS maximums
+	receiveMessageBatchSize   = 10
+	receiveMessageWaitSeconds = 20
+)
 
 // DefaultMiddlewareStack returns a reasonably configured middleware stack.
 // It requires a context which, when cancelled, will clean up the delete queue and the max number of concurrent handlers to run at a time.
 func DefaultMiddlewareStack(ctx context.Context, s *SQSService, numHandlers int) []MessageHandlerDecorator {
-	extend := SQSVisibilityExtender(s)
-	delete := SQSBatchDeleteOnSuccessWithTimeout(ctx, s, 250*time.Millisecond)
-	limit := WorkerPoolMiddleware(numHandlers)
+	extend := SQSVisibilityTimeoutExtender(s)
+	delete := SQSBatchDeleteOnSuccessWithTimeout(ctx, s, defaultDeleteBatchTimeout)
+	limit := ConcurrentHandlerLimit(numHandlers)
 	return []MessageHandlerDecorator{extend, delete, limit}
-}
-
-// SetupQueue creates the queue to listen on and returns the URL
-func SetupQueue(svc SQSAPI, name string) (*string, error) {
-	// if the queue already exists just get the url
-	getResp, err := svc.GetQueueURL(&sqs.GetQueueURLInput{
-		QueueName: aws.String(name),
-	})
-	if err == nil {
-		return getResp.QueueURL, nil
-	}
-
-	// fallback to creating the queue
-	createResp, err := svc.CreateQueue(&sqs.CreateQueueInput{
-		QueueName: aws.String(name),
-		Attributes: map[string]*string{
-			"MessageRetentionPeriod":        aws.String("1209600"), // 14 days
-			"ReceiveMessageWaitTimeSeconds": aws.String("20"),
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return createResp.QueueURL, nil
 }
 
 // Consumer is an SQS queue consumer
@@ -74,24 +41,42 @@ func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 	return &Consumer{
 		s:                      s,
 		handler:                handler,
-		delayAfterReceiveError: 5 * time.Second,
+		delayAfterReceiveError: defaultDelayAfterReceiveError,
 	}
 }
 
 // Run starts the Consumer, gracefully stopping it when the given context is cancelled.
 func (mf *Consumer) Run(ctx context.Context) error {
+	// start a batch-worth of handler-runners
 	wg := &sync.WaitGroup{}
+	wg.Add(receiveMessageBatchSize)
+	jobs := make(chan *sqs.Message)
+	for i := 0; i < receiveMessageBatchSize; i++ {
+		go func() {
+			for msg := range jobs {
+				mID := aws.StringValue(msg.MessageID)
+				log.Printf("Processing message %s", mID)
+
+				msgCtx := sqsmessage.NewContext(ctx, msg)
+				if err := mf.handler(msgCtx, aws.StringValue(msg.Body)); err != nil {
+					log.Printf("[%s] handler error: %s", mID, err)
+				}
+			}
+			wg.Done()
+		}()
+	}
 
 	rcvParams := &sqs.ReceiveMessageInput{
 		QueueURL:            mf.s.URL,
-		MaxNumberOfMessages: aws.Int64(10),
-		WaitTimeSeconds:     aws.Int64(20),
+		MaxNumberOfMessages: aws.Int64(receiveMessageBatchSize),
+		WaitTimeSeconds:     aws.Int64(receiveMessageWaitSeconds),
 	}
 	for {
 		// Stop if the context was cancelled
 		select {
 		case <-ctx.Done():
 			log.Println("Stopping worker")
+			close(jobs)
 			wg.Wait()
 			return ctx.Err()
 		default:
@@ -107,25 +92,12 @@ func (mf *Consumer) Run(ctx context.Context) error {
 
 		log.Printf("Received %d messages", len(resp.Messages))
 	HANDLE_LOOP:
-		for i, msg := range resp.Messages {
+		for _, msg := range resp.Messages {
 			select {
 			// abort early if cancelled
 			case <-ctx.Done():
 				break HANDLE_LOOP
-
-			default:
-				wg.Add(1)
-				msgCtx := sqsmessage.NewContext(ctx, msg)
-				msgCtx, _ = context.WithCancel(ctx)
-
-				// run the handler in a goroutine
-				go func(ctx context.Context, msg *sqs.Message) {
-					log.Printf("Processing message %d", i)
-					if err := mf.handler(ctx, aws.StringValue(msg.Body)); err != nil {
-						log.Printf("[%s] handler error: %s", aws.StringValue(msg.MessageID), err)
-					}
-					wg.Done()
-				}(msgCtx, msg)
+			case jobs <- msg:
 			}
 		}
 	}
