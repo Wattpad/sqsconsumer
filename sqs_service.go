@@ -42,11 +42,11 @@ type SQSService struct {
 // SetupQueue creates the queue to listen on and returns the URL.
 func SetupQueue(svc SQSAPI, name string) (*string, error) {
 	// if the queue already exists just get the url
-	getResp, err := svc.GetQueueURL(&sqs.GetQueueURLInput{
+	getResp, err := svc.GetQueueUrl(&sqs.GetQueueUrlInput{
 		QueueName: aws.String(name),
 	})
 	if err == nil {
-		return getResp.QueueURL, nil
+		return getResp.QueueUrl, nil
 	}
 
 	// fallback to creating the queue
@@ -61,5 +61,5 @@ func SetupQueue(svc SQSAPI, name string) (*string, error) {
 		return nil, err
 	}
 
-	return createResp.QueueURL, nil
+	return createResp.QueueUrl, nil
 }

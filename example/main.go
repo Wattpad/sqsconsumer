@@ -38,8 +38,7 @@ func main() {
 	// or just depend on ~/.aws/... or environment variables and don't pass any opts at all
 	s, err := sqsconsumer.SQSServiceForQueue(queueName, sqsconsumer.OptAWSRegion(region))
 	if err != nil {
-		log.Printf("Could not set up queue '%s': %s", queueName, err)
-		os.Exit(1)
+		log.Fatalf("Could not set up queue '%s': %s", queueName, err)
 	}
 
 	// set up a context which will gracefully cancel the worker on interrupt

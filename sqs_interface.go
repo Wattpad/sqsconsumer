@@ -7,6 +7,6 @@ type SQSAPI interface {
 	ChangeMessageVisibility(*sqs.ChangeMessageVisibilityInput) (*sqs.ChangeMessageVisibilityOutput, error)
 	CreateQueue(*sqs.CreateQueueInput) (*sqs.CreateQueueOutput, error)
 	DeleteMessageBatch(*sqs.DeleteMessageBatchInput) (*sqs.DeleteMessageBatchOutput, error)
-	GetQueueURL(*sqs.GetQueueURLInput) (*sqs.GetQueueURLOutput, error)
+	GetQueueUrl(*sqs.GetQueueUrlInput) (*sqs.GetQueueUrlOutput, error)
 	ReceiveMessage(*sqs.ReceiveMessageInput) (*sqs.ReceiveMessageOutput, error)
 }

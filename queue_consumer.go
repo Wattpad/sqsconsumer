@@ -29,7 +29,7 @@ func (mf *Consumer) Run(ctx context.Context) error {
 	for i := 0; i < receiveMessageBatchSize; i++ {
 		go func() {
 			for msg := range jobs {
-				mID := aws.StringValue(msg.MessageID)
+				mID := aws.StringValue(msg.MessageId)
 				log.Printf("Processing message %s", mID)
 
 				msgCtx := sqsmessage.NewContext(ctx, msg)
@@ -42,7 +42,7 @@ func (mf *Consumer) Run(ctx context.Context) error {
 	}
 
 	rcvParams := &sqs.ReceiveMessageInput{
-		QueueURL:            mf.s.URL,
+		QueueUrl:            mf.s.URL,
 		MaxNumberOfMessages: aws.Int64(receiveMessageBatchSize),
 		WaitTimeSeconds:     aws.Int64(receiveMessageWaitSeconds),
 	}

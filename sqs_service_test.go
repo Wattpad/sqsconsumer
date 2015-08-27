@@ -21,7 +21,7 @@ func TestSetupQueue(t *testing.T) {
 		svc := mock.NewMockSQSAPI(ctl)
 
 		Convey("Given SQS will return that the queue already exists", func() {
-			svc.EXPECT().GetQueueURL(&sqs.GetQueueURLInput{QueueName: aws.String(name)}).Return(&sqs.GetQueueURLOutput{QueueURL: aws.String("http://example.com/queue/" + name)}, nil)
+			svc.EXPECT().GetQueueUrl(&sqs.GetQueueUrlInput{QueueName: aws.String(name)}).Return(&sqs.GetQueueUrlOutput{QueueUrl: aws.String("http://example.com/queue/" + name)}, nil)
 
 			Convey("When SetupQueue is invoked", func() {
 				url, err := SetupQueue(svc, name)
@@ -37,8 +37,8 @@ func TestSetupQueue(t *testing.T) {
 		})
 
 		Convey("Given SQS creates the new queue successfully", func() {
-			svc.EXPECT().GetQueueURL(gomock.Any()).Return(nil, assert.AnError)
-			svc.EXPECT().CreateQueue(gomock.Any()).Return(&sqs.CreateQueueOutput{QueueURL: aws.String("http://example.com/queue/" + name)}, nil)
+			svc.EXPECT().GetQueueUrl(gomock.Any()).Return(nil, assert.AnError)
+			svc.EXPECT().CreateQueue(gomock.Any()).Return(&sqs.CreateQueueOutput{QueueUrl: aws.String("http://example.com/queue/" + name)}, nil)
 
 			Convey("When SetupQueue is invoked", func() {
 				url, err := SetupQueue(svc, name)
@@ -54,7 +54,7 @@ func TestSetupQueue(t *testing.T) {
 		})
 
 		Convey("Given SQS returns an error", func() {
-			svc.EXPECT().GetQueueURL(gomock.Any()).Return(nil, assert.AnError)
+			svc.EXPECT().GetQueueUrl(gomock.Any()).Return(nil, assert.AnError)
 			svc.EXPECT().CreateQueue(gomock.Any()).Return(nil, assert.AnError)
 
 			Convey("When SetupQueue is invoked", func() {

@@ -95,15 +95,15 @@ func (ve *visibilityTimeoutExtender) messageHandlerFunc(ctx context.Context, msg
 }
 
 func (ve *visibilityTimeoutExtender) extendVisibilityTimeout(msg *sqs.Message) bool {
-	log.Println("Extending visibility timeout for message", aws.StringValue(msg.MessageID))
+	log.Println("Extending visibility timeout for message", aws.StringValue(msg.MessageId))
 	p := &sqs.ChangeMessageVisibilityInput{
-		QueueURL:          ve.srv.URL,
+		QueueUrl:          ve.srv.URL,
 		ReceiptHandle:     msg.ReceiptHandle,
 		VisibilityTimeout: aws.Int64(ve.extensionSecs),
 	}
 	_, err := ve.srv.Svc.ChangeMessageVisibility(p)
 	if err != nil {
-		log.Println("Failed to extend visibility timeout for message", aws.StringValue(msg.MessageID))
+		log.Println("Failed to extend visibility timeout for message", aws.StringValue(msg.MessageId))
 		return false
 	}
 

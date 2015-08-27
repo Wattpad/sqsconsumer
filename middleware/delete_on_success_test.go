@@ -42,8 +42,8 @@ func TestDeleteQueueDeleteBatch(t *testing.T) {
 
 			Convey("When deleteBatch is invoked with a pair of delete request entries", func() {
 				_, err := q.deleteBatch([]*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), ID: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), ID: aws.String("i2")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
 				})
 
 				Convey("Then the error should be nil", func() {
@@ -56,7 +56,7 @@ func TestDeleteQueueDeleteBatch(t *testing.T) {
 			mSQS := mock.NewMockSQSAPI(ctl)
 			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{
 				Failed: []*sqs.BatchResultErrorEntry{
-					&sqs.BatchResultErrorEntry{ID: aws.String("i1")},
+					&sqs.BatchResultErrorEntry{Id: aws.String("i1")},
 				},
 			}, nil)
 
@@ -64,8 +64,8 @@ func TestDeleteQueueDeleteBatch(t *testing.T) {
 
 			Convey("When deleteBatch is invoked with a pair of delete request entries", func() {
 				batch := []*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), ID: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), ID: aws.String("i2")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
 				}
 				fails, err := q.deleteBatch(batch)
 
@@ -88,8 +88,8 @@ func TestDeleteQueueDeleteBatch(t *testing.T) {
 
 			Convey("When deleteBatch is invoked with a pair of delete request entries", func() {
 				_, err := q.deleteBatch([]*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), ID: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), ID: aws.String("i2")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
 				})
 
 				Convey("Then an error should be returned", func() {
@@ -111,8 +111,8 @@ func TestDeleteQueueAddToPendingDeletes(t *testing.T) {
 				q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
 
 				Convey("When invoked with 2 messages with unique MessageIDs", func() {
-					q.addToPendingDeletes(&sqs.Message{MessageID: aws.String("1")})
-					q.addToPendingDeletes(&sqs.Message{MessageID: aws.String("2")})
+					q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
+					q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("2")})
 
 					Convey("Then the queue should contain 2 messages", func() {
 						q.Lock()
@@ -129,8 +129,8 @@ func TestDeleteQueueAddToPendingDeletes(t *testing.T) {
 				q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
 
 				Convey("When invoked with 2 messages with the same MessageID", func() {
-					q.addToPendingDeletes(&sqs.Message{MessageID: aws.String("1")})
-					q.addToPendingDeletes(&sqs.Message{MessageID: aws.String("1")})
+					q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
+					q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
 
 					Convey("Then the queue should contain only 1 message", func() {
 						q.Lock()
@@ -216,15 +216,15 @@ func TestDeleteQueueDeleteFromPending(t *testing.T) {
 			mSQS := mock.NewMockSQSAPI(ctl)
 			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{
 				Failed: []*sqs.BatchResultErrorEntry{
-					&sqs.BatchResultErrorEntry{ID: aws.String("i1")},
+					&sqs.BatchResultErrorEntry{Id: aws.String("i1")},
 				},
 			}, nil)
 
 			Convey("And a delete queue with 2 entries in it", func() {
 				q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
 				q.entries = []*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), ID: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), ID: aws.String("i2")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
 				}
 
 				Convey("When invoked", func() {
@@ -250,8 +250,8 @@ func TestDeleteQueueDeleteFromPending(t *testing.T) {
 			Convey("And a delete queue with 2 entries in it", func() {
 				q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
 				q.entries = []*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), ID: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), ID: aws.String("i2")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
 				}
 
 				Convey("When invoked", func() {
@@ -294,7 +294,7 @@ func TestDeleteQueueStart(t *testing.T) {
 					go q.start(ctx)
 
 					Convey("And a message is written to the queue channel", func() {
-						q.queue <- &sqs.Message{MessageID: aws.String("1")}
+						q.queue <- &sqs.Message{MessageId: aws.String("1")}
 
 						Convey("Then the queue has one entry", func() {
 							q.Lock()
@@ -349,7 +349,7 @@ func TestDeleteQueueStart(t *testing.T) {
 					go q.start(ctx)
 
 					Convey("When a message is added to the queue (knowing the batch size is more than 1 item)", func() {
-						q.queue <- &sqs.Message{MessageID: aws.String("1")}
+						q.queue <- &sqs.Message{MessageId: aws.String("1")}
 
 						Convey("And more than 10ms passes with no more messages", func() {
 							time.Sleep(15 * time.Millisecond)
@@ -372,15 +372,15 @@ func TestDeleteQueueStart(t *testing.T) {
 				go q.start(ctx)
 
 				Convey("When 9 messages are added to the queue (knowing the batch size is 10)", func() {
-					q.queue <- &sqs.Message{MessageID: aws.String("1")}
-					q.queue <- &sqs.Message{MessageID: aws.String("2")}
-					q.queue <- &sqs.Message{MessageID: aws.String("3")}
-					q.queue <- &sqs.Message{MessageID: aws.String("4")}
-					q.queue <- &sqs.Message{MessageID: aws.String("5")}
-					q.queue <- &sqs.Message{MessageID: aws.String("6")}
-					q.queue <- &sqs.Message{MessageID: aws.String("7")}
-					q.queue <- &sqs.Message{MessageID: aws.String("8")}
-					q.queue <- &sqs.Message{MessageID: aws.String("9")}
+					q.queue <- &sqs.Message{MessageId: aws.String("1")}
+					q.queue <- &sqs.Message{MessageId: aws.String("2")}
+					q.queue <- &sqs.Message{MessageId: aws.String("3")}
+					q.queue <- &sqs.Message{MessageId: aws.String("4")}
+					q.queue <- &sqs.Message{MessageId: aws.String("5")}
+					q.queue <- &sqs.Message{MessageId: aws.String("6")}
+					q.queue <- &sqs.Message{MessageId: aws.String("7")}
+					q.queue <- &sqs.Message{MessageId: aws.String("8")}
+					q.queue <- &sqs.Message{MessageId: aws.String("9")}
 
 					Convey("After a short wait to give the queue time to run", func() {
 						time.Sleep(2 * time.Millisecond)
@@ -393,7 +393,7 @@ func TestDeleteQueueStart(t *testing.T) {
 								mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
 
 								Convey("And a 10th message is added to the queue", func() {
-									q.queue <- &sqs.Message{MessageID: aws.String("10")}
+									q.queue <- &sqs.Message{MessageId: aws.String("10")}
 
 									Convey("After a short wait to give the queue time to run", func() {
 										time.Sleep(2 * time.Millisecond)
@@ -442,7 +442,7 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 						handler = deleter(handler)
 
 						Convey("When a message is successfully processed", func() {
-							msg := &sqs.Message{MessageID: aws.String("1"), Body: aws.String("message")}
+							msg := &sqs.Message{MessageId: aws.String("1"), Body: aws.String("message")}
 							msgCtx := sqsmessage.NewContext(ctx, msg)
 							handler(msgCtx, *msg.Body)
 
@@ -479,7 +479,7 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 						Convey("When 9 messages are successfully processed", func() {
 							for i := 1; i <= 9; i++ {
 								msg := &sqs.Message{
-									MessageID: aws.String(fmt.Sprintf("%d", i)),
+									MessageId: aws.String(fmt.Sprintf("%d", i)),
 									Body:      aws.String("message"),
 								}
 								msgCtx := sqsmessage.NewContext(ctx, msg)
@@ -497,7 +497,7 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 										mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
 
 										Convey("And a 10th message is added to the queue", func() {
-											msg := &sqs.Message{MessageID: aws.String("10"), Body: aws.String("message")}
+											msg := &sqs.Message{MessageId: aws.String("10"), Body: aws.String("message")}
 											msgCtx := sqsmessage.NewContext(ctx, msg)
 											handler(msgCtx, *msg.Body)
 
@@ -536,7 +536,7 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 						handler = deleter(handler)
 
 						Convey("When a message fails to process", func() {
-							msg := &sqs.Message{MessageID: aws.String("1"), Body: aws.String("message")}
+							msg := &sqs.Message{MessageId: aws.String("1"), Body: aws.String("message")}
 							msgCtx := sqsmessage.NewContext(ctx, msg)
 							handler(msgCtx, *msg.Body)
 

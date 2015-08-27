@@ -58,13 +58,13 @@ func (dq *deleteQueue) addToPendingDeletes(msg *sqs.Message) {
 	defer dq.Unlock()
 
 	for _, e := range dq.entries {
-		if *msg.MessageID == *e.ID {
+		if *msg.MessageId == *e.Id {
 			return
 		}
 	}
 
 	dq.entries = append(dq.entries, &sqs.DeleteMessageBatchRequestEntry{
-		ID:            msg.MessageID,
+		Id:            msg.MessageId,
 		ReceiptHandle: msg.ReceiptHandle,
 	})
 }
@@ -72,7 +72,7 @@ func (dq *deleteQueue) addToPendingDeletes(msg *sqs.Message) {
 // deleteBatch deletes up to 10 messages and returns the list of messages that failed to delete or an error for overall failure.
 func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) ([]*sqs.DeleteMessageBatchRequestEntry, error) {
 	req := &sqs.DeleteMessageBatchInput{
-		QueueURL: dq.url,
+		QueueUrl: dq.url,
 		Entries:  msgs,
 	}
 
@@ -86,7 +86,7 @@ func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) (
 	var failed []*sqs.DeleteMessageBatchRequestEntry
 	for _, f := range resp.Failed {
 		for _, m := range msgs {
-			if *m.ID == *f.ID {
+			if *m.Id == *f.Id {
 				failed = append(failed, m)
 				break
 			}
@@ -118,7 +118,7 @@ func (dq *deleteQueue) deleteFromPending() int {
 	if len(fails) > 0 {
 		n -= len(fails)
 		for _, m := range fails {
-			log.Printf("Failed to delete message %s", aws.StringValue(m.ID))
+			log.Printf("Failed to delete message %s", aws.StringValue(m.Id))
 		}
 	}
 	return n

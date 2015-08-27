@@ -66,14 +66,14 @@ func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 			handler := testHandlerReturnAfterDelay(true, 15*time.Millisecond)
 
 			Convey("And the expectation that ChangeMessageVisibility will be called", func() {
-				msg := &sqs.Message{MessageID: aws.String("i1"), ReceiptHandle: aws.String("r1")}
+				msg := &sqs.Message{MessageId: aws.String("i1"), ReceiptHandle: aws.String("r1")}
 				url := aws.String("an_url")
 
 				m := mock.NewMockSQSAPI(ctl)
 				m.EXPECT().ChangeMessageVisibility(&sqs.ChangeMessageVisibilityInput{
 					ReceiptHandle:     msg.ReceiptHandle,
 					VisibilityTimeout: aws.Int64(1),
-					QueueURL:          url,
+					QueueUrl:          url,
 				}).Return(&sqs.ChangeMessageVisibilityOutput{}, nil)
 
 				s := &sqsconsumer.SQSService{Svc: m, URL: url}
@@ -109,7 +109,7 @@ func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 					ex := SQSVisibilityTimeoutExtender(s, OptEveryDuration(5*time.Millisecond))
 
 					Convey("When invoking the wrapped handler that will fail and waiting longer than the extender timeout", func() {
-						msg := &sqs.Message{MessageID: aws.String("i1"), ReceiptHandle: aws.String("r1")}
+						msg := &sqs.Message{MessageId: aws.String("i1"), ReceiptHandle: aws.String("r1")}
 						ctx := sqsmessage.NewContext(context.Background(), msg)
 
 						ex(handler)(ctx, "a message")

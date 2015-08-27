@@ -62,15 +62,15 @@ func (_mr *_MockSQSAPIRecorder) DeleteMessageBatch(arg0 interface{}) *gomock.Cal
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "DeleteMessageBatch", arg0)
 }
 
-func (_m *MockSQSAPI) GetQueueURL(_param0 *sqs.GetQueueURLInput) (*sqs.GetQueueURLOutput, error) {
-	ret := _m.ctrl.Call(_m, "GetQueueURL", _param0)
-	ret0, _ := ret[0].(*sqs.GetQueueURLOutput)
+func (_m *MockSQSAPI) GetQueueUrl(_param0 *sqs.GetQueueUrlInput) (*sqs.GetQueueUrlOutput, error) {
+	ret := _m.ctrl.Call(_m, "GetQueueUrl", _param0)
+	ret0, _ := ret[0].(*sqs.GetQueueUrlOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-func (_mr *_MockSQSAPIRecorder) GetQueueURL(arg0 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetQueueURL", arg0)
+func (_mr *_MockSQSAPIRecorder) GetQueueUrl(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetQueueUrl", arg0)
 }
 
 func (_m *MockSQSAPI) ReceiveMessage(_param0 *sqs.ReceiveMessageInput) (*sqs.ReceiveMessageOutput, error) {
