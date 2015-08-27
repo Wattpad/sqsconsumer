@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/Wattpad/sqsconsumer"
+	"github.com/Wattpad/sqsconsumer/middleware"
 	"github.com/go-kit/kit/metrics/expvar"
 	"golang.org/x/net/context"
 )
@@ -30,8 +31,7 @@ func init() {
 func main() {
 	region := "us-east-1"
 	queueName := "example_queue"
-	numFetchers := 1
-	numHandlers := 3
+	numFetchers := 3
 
 	// set up an SQS service instance
 	// note that you can modify the AWS config used - make your own sqsconsumer.AWSConfigOption
@@ -57,15 +57,18 @@ func main() {
 	ms := fmt.Sprintf("%s.success", queueName)
 	mf := fmt.Sprintf("%s.fail", queueName)
 	mt := fmt.Sprintf("%s.time", queueName)
-	track := sqsconsumer.TrackMetrics(ms, mf, mt)
+	track := middleware.TrackMetrics(ms, mf, mt)
 
-	// set up middleware stack
+	// set up middleware stack for each consumer
 	delCtx, cancelDelete := context.WithCancel(context.Background())
-	middleware := sqsconsumer.DefaultMiddlewareStack(delCtx, s, numHandlers)
-	middleware = append(middleware, track)
+	stack := middleware.DefaultStack(delCtx, s)
+
+	// limit the total handlers running across all consumers to 20
+	limit := middleware.ConcurrentHandlerLimit(20)
 
 	// wrap the handler
-	handler := sqsconsumer.ApplyDecoratorsToHandler(processMessage, middleware...)
+	stack = append(stack, limit, track)
+	handler := middleware.ApplyDecoratorsToHandler(processMessage, stack...)
 
 	// start the consumers
 	log.Println("Starting queue consumers")

@@ -11,31 +11,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-const (
-	defaultDeleteBatchTimeout     = 250 * time.Millisecond
-	defaultDelayAfterReceiveError = 5 * time.Second
-
-	// AWS maximums
-	receiveMessageBatchSize   = 10
-	receiveMessageWaitSeconds = 20
-)
-
-// DefaultMiddlewareStack returns a reasonably configured middleware stack.
-// It requires a context which, when cancelled, will clean up the delete queue and the max number of concurrent handlers to run at a time.
-func DefaultMiddlewareStack(ctx context.Context, s *SQSService, numHandlers int) []MessageHandlerDecorator {
-	extend := SQSVisibilityTimeoutExtender(s)
-	delete := SQSBatchDeleteOnSuccessWithTimeout(ctx, s, defaultDeleteBatchTimeout)
-	limit := ConcurrentHandlerLimit(numHandlers)
-	return []MessageHandlerDecorator{extend, delete, limit}
-}
-
-// Consumer is an SQS queue consumer
-type Consumer struct {
-	s                      *SQSService
-	handler                MessageHandlerFunc
-	delayAfterReceiveError time.Duration
-}
-
 // NewConsumer creates a Consumer that uses the given SQSService to connect and invokes the handler for each message received.
 func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 	return &Consumer{
@@ -101,4 +76,19 @@ func (mf *Consumer) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+const (
+	defaultDelayAfterReceiveError = 5 * time.Second
+
+	// AWS maximums
+	receiveMessageBatchSize   = 10
+	receiveMessageWaitSeconds = 20
+)
+
+// Consumer is an SQS queue consumer
+type Consumer struct {
+	s                      *SQSService
+	handler                MessageHandlerFunc
+	delayAfterReceiveError time.Duration
 }

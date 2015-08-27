@@ -1,8 +1,9 @@
-package sqsconsumer
+package middleware
 
 import (
 	"time"
 
+	"github.com/Wattpad/sqsconsumer"
 	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/expvar"
 	"golang.org/x/net/context"
@@ -18,7 +19,7 @@ func TrackMetrics(successVarName, failureVarName, timingVarName string) MessageH
 
 	timing := metrics.NewTimeHistogram(time.Millisecond, h)
 
-	return func(fn MessageHandlerFunc) MessageHandlerFunc {
+	return func(fn sqsconsumer.MessageHandlerFunc) sqsconsumer.MessageHandlerFunc {
 		return func(ctx context.Context, msg string) error {
 			start := time.Now()
 			defer func() {

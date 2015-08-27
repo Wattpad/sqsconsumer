@@ -1,10 +1,11 @@
-package sqsconsumer
+package middleware
 
 import (
 	"log"
 	"sync"
 	"time"
 
+	"github.com/Wattpad/sqsconsumer"
 	"github.com/Wattpad/sqsconsumer/sqsmessage"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
@@ -16,13 +17,13 @@ type deleteQueue struct {
 	sync.Mutex
 	entries []*sqs.DeleteMessageBatchRequestEntry
 
-	svc                 SQSAPI
+	svc                 sqsconsumer.SQSAPI
 	url                 *string
 	accumulationTimeout time.Duration
 }
 
 // SQSBatchDeleteOnSuccessWithTimeout decorates a MessageHandler to delete the message if processing succeeded.
-func SQSBatchDeleteOnSuccessWithTimeout(ctx context.Context, s *SQSService, after time.Duration) MessageHandlerDecorator {
+func SQSBatchDeleteOnSuccessWithTimeout(ctx context.Context, s *sqsconsumer.SQSService, after time.Duration) MessageHandlerDecorator {
 	dq := &deleteQueue{
 		svc:                 s.Svc,
 		url:                 s.URL,
@@ -30,7 +31,7 @@ func SQSBatchDeleteOnSuccessWithTimeout(ctx context.Context, s *SQSService, afte
 		queue:               make(chan *sqs.Message),
 	}
 
-	return func(fn MessageHandlerFunc) MessageHandlerFunc {
+	return func(fn sqsconsumer.MessageHandlerFunc) sqsconsumer.MessageHandlerFunc {
 		go dq.start(ctx)
 
 		return func(msgCtx context.Context, msg string) error {

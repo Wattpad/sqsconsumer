@@ -1,4 +1,4 @@
-package sqsconsumer
+package middleware
 
 import (
 	"sync/atomic"

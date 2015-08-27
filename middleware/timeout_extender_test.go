@@ -1,4 +1,4 @@
-package sqsconsumer
+package middleware
 
 import (
 	"io/ioutil"
@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/Wattpad/sqsconsumer"
 	"github.com/Wattpad/sqsconsumer/mock"
 	"github.com/Wattpad/sqsconsumer/sqsmessage"
 	"github.com/aws/aws-sdk-go/aws"
@@ -30,7 +31,7 @@ func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 
 		Convey("When created with no options", func() {
 			m := mock.NewMockSQSAPI(ctl)
-			v := newDefaultVisibilityTimeoutExtender(&SQSService{Svc: m}, noop)
+			v := newDefaultVisibilityTimeoutExtender(&sqsconsumer.SQSService{Svc: m}, noop)
 
 			Convey("Should default to run every 25 seconds", func() {
 				So(v.every, ShouldEqual, 25*time.Second)
@@ -44,7 +45,7 @@ func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 		Convey("When created with an OptEveryDuration", func() {
 			duration := 3 * time.Millisecond
 			m := mock.NewMockSQSAPI(ctl)
-			v := newDefaultVisibilityTimeoutExtender(&SQSService{Svc: m}, noop, OptEveryDuration(duration))
+			v := newDefaultVisibilityTimeoutExtender(&sqsconsumer.SQSService{Svc: m}, noop, OptEveryDuration(duration))
 
 			Convey("Should use the specified duration", func() {
 				So(v.every, ShouldEqual, duration)
@@ -54,7 +55,7 @@ func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 		Convey("When created with an OptExtensionSecs", func() {
 			extension := int64(3)
 			m := mock.NewMockSQSAPI(ctl)
-			v := newDefaultVisibilityTimeoutExtender(&SQSService{Svc: m}, noop, OptExtensionSecs(extension))
+			v := newDefaultVisibilityTimeoutExtender(&sqsconsumer.SQSService{Svc: m}, noop, OptExtensionSecs(extension))
 
 			Convey("Should use the specified extension", func() {
 				So(v.extensionSecs, ShouldEqual, extension)
@@ -75,7 +76,7 @@ func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 					QueueURL:          url,
 				}).Return(&sqs.ChangeMessageVisibilityOutput{}, nil)
 
-				s := &SQSService{Svc: m, URL: url}
+				s := &sqsconsumer.SQSService{Svc: m, URL: url}
 
 				Convey("And the handler is wrapped in an SQSVisibilityTimeoutExtender configured to run after 10ms with an extension of 1s", func() {
 					ex := SQSVisibilityTimeoutExtender(s, OptEveryDuration(10*time.Millisecond), OptExtensionSecs(1))
@@ -102,7 +103,7 @@ func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 			Convey("And an expectation that ChangeMessageVisibility is never called", func() {
 				m := mock.NewMockSQSAPI(ctl)
 				m.EXPECT().ChangeMessageVisibility(gomock.Any()).Times(0)
-				s := &SQSService{Svc: m, URL: aws.String("an_url")}
+				s := &sqsconsumer.SQSService{Svc: m, URL: aws.String("an_url")}
 
 				Convey("And the handler is wrapped in an SQSVisibilityTimeoutExtender configured to run after 5ms", func() {
 					ex := SQSVisibilityTimeoutExtender(s, OptEveryDuration(5*time.Millisecond))
@@ -124,4 +125,8 @@ func TestSQSVisibilityTimeoutExtender(t *testing.T) {
 			})
 		})
 	})
+}
+
+func noop(ctx context.Context, msg string) error {
+	return nil
 }

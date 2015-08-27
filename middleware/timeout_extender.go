@@ -1,9 +1,10 @@
-package sqsconsumer
+package middleware
 
 import (
 	"log"
 	"time"
 
+	"github.com/Wattpad/sqsconsumer"
 	"github.com/Wattpad/sqsconsumer/sqsmessage"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
@@ -11,8 +12,8 @@ import (
 )
 
 // SQSVisibilityTimeoutExtender decorates a MessageHandler to periodically extend the visibility timeout until the handler is done
-func SQSVisibilityTimeoutExtender(s *SQSService, opts ...VisibilityTimeoutExtenderOption) MessageHandlerDecorator {
-	return func(fn MessageHandlerFunc) MessageHandlerFunc {
+func SQSVisibilityTimeoutExtender(s *sqsconsumer.SQSService, opts ...VisibilityTimeoutExtenderOption) MessageHandlerDecorator {
+	return func(fn sqsconsumer.MessageHandlerFunc) sqsconsumer.MessageHandlerFunc {
 		extender := newDefaultVisibilityTimeoutExtender(s, fn, opts...)
 		return extender.messageHandlerFunc
 	}
@@ -36,10 +37,10 @@ func OptExtensionSecs(s int64) VisibilityTimeoutExtenderOption {
 }
 
 type visibilityTimeoutExtender struct {
-	srv           *SQSService
+	srv           *sqsconsumer.SQSService
 	every         time.Duration
 	extensionSecs int64
-	next          MessageHandlerFunc
+	next          sqsconsumer.MessageHandlerFunc
 }
 
 const (
@@ -47,7 +48,7 @@ const (
 	defaultVisibilityTimeoutExtensionSeconds  = 30
 )
 
-func newDefaultVisibilityTimeoutExtender(s *SQSService, fn MessageHandlerFunc, opts ...VisibilityTimeoutExtenderOption) *visibilityTimeoutExtender {
+func newDefaultVisibilityTimeoutExtender(s *sqsconsumer.SQSService, fn sqsconsumer.MessageHandlerFunc, opts ...VisibilityTimeoutExtenderOption) *visibilityTimeoutExtender {
 	ve := &visibilityTimeoutExtender{
 		srv:           s,
 		every:         defaultVisibilityTimeoutExtenderFrequency,

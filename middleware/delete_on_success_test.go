@@ -1,4 +1,4 @@
-package sqsconsumer
+package middleware
 
 import (
 	"runtime"
@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/Wattpad/sqsconsumer"
 	"github.com/Wattpad/sqsconsumer/mock"
 	"github.com/Wattpad/sqsconsumer/sqsmessage"
 	"github.com/aws/aws-sdk-go/aws"
@@ -432,7 +433,7 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 					defer cancel()
 
 					u := "a/url"
-					srv := &SQSService{Svc: mSQS, URL: &u}
+					srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
 
 					deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
 
@@ -467,7 +468,7 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 					defer cancel()
 
 					u := "a/url"
-					srv := &SQSService{Svc: mSQS, URL: &u}
+					srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
 
 					deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
 
@@ -526,7 +527,7 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 					defer cancel()
 
 					u := "a/url"
-					srv := &SQSService{Svc: mSQS, URL: &u}
+					srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
 
 					deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
 
@@ -554,7 +555,7 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 	})
 }
 
-func testMakeDeleteQueueWithTimeout(s SQSAPI, timeout time.Duration) *deleteQueue {
+func testMakeDeleteQueueWithTimeout(s sqsconsumer.SQSAPI, timeout time.Duration) *deleteQueue {
 	u := "url"
 	return &deleteQueue{
 		svc:                 s,
