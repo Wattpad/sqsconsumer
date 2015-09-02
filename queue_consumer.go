@@ -30,7 +30,7 @@ func (mf *Consumer) Run(ctx context.Context) error {
 		go func() {
 			for msg := range jobs {
 				mID := aws.StringValue(msg.MessageId)
-				log.Printf("Processing message %s", mID)
+				stdoutLog.Printf("Processing message %s", mID)
 
 				msgCtx := sqsmessage.NewContext(ctx, msg)
 				if err := mf.handler(msgCtx, aws.StringValue(msg.Body)); err != nil {
@@ -65,7 +65,7 @@ func (mf *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 
-		log.Printf("Received %d messages", len(resp.Messages))
+		stdoutLog.Printf("Received %d messages", len(resp.Messages))
 	HANDLE_LOOP:
 		for _, msg := range resp.Messages {
 			select {

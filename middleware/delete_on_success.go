@@ -76,7 +76,7 @@ func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) (
 		Entries:  msgs,
 	}
 
-	log.Printf("Deleting %d messages", len(msgs))
+	stdoutLog.Printf("Deleting %d messages", len(msgs))
 	resp, err := dq.svc.DeleteMessageBatch(req)
 	if err != nil {
 		log.Println("Error deleting messages:", err)
