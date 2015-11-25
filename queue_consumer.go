@@ -30,7 +30,9 @@ func (mf *Consumer) Run(ctx context.Context) error {
 		go func() {
 			for msg := range jobs {
 				mID := aws.StringValue(msg.MessageId)
-				stdoutLog.Printf("Processing message %s", mID)
+				if mf.Verbose {
+					stdoutLog.Printf("Processing message %s", mID)
+				}
 
 				msgCtx := sqsmessage.NewContext(ctx, msg)
 				if err := mf.handler(msgCtx, aws.StringValue(msg.Body)); err != nil {
@@ -45,6 +47,7 @@ func (mf *Consumer) Run(ctx context.Context) error {
 		QueueUrl:            mf.s.URL,
 		MaxNumberOfMessages: aws.Int64(receiveMessageBatchSize),
 		WaitTimeSeconds:     aws.Int64(receiveMessageWaitSeconds),
+		AttributeNames:      []*string{aws.String("SentTimestamp"), aws.String("ApproximateReceiveCount")},
 	}
 	for {
 		// Stop if the context was cancelled
@@ -65,7 +68,10 @@ func (mf *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 
-		stdoutLog.Printf("Received %d messages", len(resp.Messages))
+		if mf.Verbose {
+			stdoutLog.Printf("Received %d messages", len(resp.Messages))
+		}
+
 	HANDLE_LOOP:
 		for _, msg := range resp.Messages {
 			select {
@@ -91,4 +97,5 @@ type Consumer struct {
 	s                      *SQSService
 	handler                MessageHandlerFunc
 	delayAfterReceiveError time.Duration
+	Verbose                bool
 }
