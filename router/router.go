@@ -17,8 +17,8 @@ func New() Type {
 }
 
 // Add registers a handler func for a specific message type
-func (t Type) Add(r string, h sqsconsumer.MessageHandlerFunc) {
-	t[r] = h
+func (t Type) Add(route string, h sqsconsumer.MessageHandlerFunc) {
+	t[route] = h
 }
 
 // Handler handles JSON messages and routes the message to an appropriate handler func based on the "type" property of the message
