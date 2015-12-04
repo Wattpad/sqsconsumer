@@ -1,6 +1,9 @@
 {
 	"ImportPath": "github.com/Wattpad/sqsconsumer",
 	"GoVersion": "go1.5.1",
+	"Packages": [
+		"./..."
+	],
 	"Deps": [
 		{
 			"ImportPath": "github.com/aws/aws-sdk-go/aws",
@@ -36,6 +39,14 @@
 			"ImportPath": "github.com/aws/aws-sdk-go/service/sqs",
 			"Comment": "v0.9.6",
 			"Rev": "69142c71761512d894b028dc5c8cc312758372dd"
+		},
+		{
+			"ImportPath": "github.com/codahale/hdrhistogram",
+			"Rev": "954f16e8b9ef0e5d5189456aa4c1202758e04f17"
+		},
+		{
+			"ImportPath": "github.com/go-kit/kit/metrics",
+			"Rev": "c7049fa585f83c0d7cf9c5bf4a62ea8449fec12a"
 		},
 		{
 			"ImportPath": "github.com/golang/mock/gomock",
