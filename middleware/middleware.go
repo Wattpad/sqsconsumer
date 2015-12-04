@@ -20,7 +20,7 @@ func ApplyDecoratorsToHandler(fn sqsconsumer.MessageHandlerFunc, ds ...MessageHa
 
 const defaultDeleteBatchTimeout = 250 * time.Millisecond
 
-// DefaultMiddlewareStack returns a base SQS middleware stack which will extend visibility timeouts as long as a handler is running and delete messages on success.
+// DefaultStack returns a base SQS middleware stack which will extend visibility timeouts as long as a handler is running and delete messages on success.
 // When the context is cancelled it will clean up the delete queue.
 func DefaultStack(ctx context.Context, s *sqsconsumer.SQSService) []MessageHandlerDecorator {
 	extend := SQSVisibilityTimeoutExtender(s)
