@@ -69,9 +69,9 @@ func TestQueueConsumerRun(t *testing.T) {
 			// run the fetcher
 			q.Run(ctx)
 
-			// ensure no routines were leaked
+			// ensure no routines were leaked other than the receive messages goroutine (leaks on purpose)
 			time.Sleep(time.Millisecond)
-			if !assert.Equal(t, ngo, runtime.NumGoroutine(), "Should not leak goroutines") {
+			if !assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines") {
 				panic(1)
 			}
 
@@ -120,7 +120,7 @@ func TestQueueConsumerRun(t *testing.T) {
 
 			// ensure no routines were leaked
 			time.Sleep(time.Millisecond)
-			if !assert.Equal(t, ngo, runtime.NumGoroutine(), "Should not leak goroutines") {
+			if !assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines") {
 				panic(1)
 			}
 		})
@@ -146,7 +146,7 @@ func TestQueueConsumerRun(t *testing.T) {
 			assert.Error(t, err)
 
 			time.Sleep(time.Millisecond) // time for goroutines to end
-			assert.Equal(t, ngo, runtime.NumGoroutine(), "Should not leak goroutines")
+			assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines")
 		})
 
 		Convey("Retries after an error from ReceiveMessage", func() {
@@ -172,7 +172,7 @@ func TestQueueConsumerRun(t *testing.T) {
 			assert.InDelta(t, 2, receiveCount, 1, "ReceiveMessage should have been retried 1-3 times")
 
 			time.Sleep(time.Millisecond) // time for goroutines to end
-			assert.Equal(t, ngo, runtime.NumGoroutine(), "Should not leak goroutines")
+			assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines")
 		})
 	})
 }

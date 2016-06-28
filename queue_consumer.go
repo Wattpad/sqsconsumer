@@ -17,6 +17,46 @@ func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 		s:                      s,
 		handler:                handler,
 		delayAfterReceiveError: defaultDelayAfterReceiveError,
+		Logger:                 log.Printf, // or no-op?
+	}
+}
+
+func (mf *Consumer) startWorkers(ctx context.Context, jobs <-chan *sqs.Message, wg *sync.WaitGroup) {
+	for i := 0; i < receiveMessageBatchSize; i++ {
+		go func() {
+			for msg := range jobs {
+				mID := aws.StringValue(msg.MessageId)
+
+				msgCtx := sqsmessage.NewContext(ctx, msg)
+				if err := mf.handler(msgCtx, aws.StringValue(msg.Body)); err != nil {
+					mf.Logger("[%s] handler error: %s", mID, err)
+				}
+			}
+			wg.Done()
+		}()
+	}
+}
+
+func (mf *Consumer) receiveMessages(ch chan<- *sqs.Message) {
+	rcvParams := &sqs.ReceiveMessageInput{
+		QueueUrl:            mf.s.URL,
+		MaxNumberOfMessages: aws.Int64(receiveMessageBatchSize),
+		WaitTimeSeconds:     aws.Int64(receiveMessageWaitSeconds),
+		AttributeNames:      []*string{aws.String("SentTimestamp"), aws.String("ApproximateReceiveCount")},
+	}
+
+	for {
+		resp, err := mf.s.Svc.ReceiveMessage(rcvParams)
+		if err != nil {
+			mf.Logger("Error receiving messages: %v", err)
+			mf.Logger("Waiting before trying again")
+			time.Sleep(mf.delayAfterReceiveError)
+			continue
+		}
+
+		for _, msg := range resp.Messages {
+			ch <- msg
+		}
 	}
 }
 
@@ -26,29 +66,11 @@ func (mf *Consumer) Run(ctx context.Context) error {
 	wg := &sync.WaitGroup{}
 	wg.Add(receiveMessageBatchSize)
 	jobs := make(chan *sqs.Message)
-	for i := 0; i < receiveMessageBatchSize; i++ {
-		go func() {
-			for msg := range jobs {
-				mID := aws.StringValue(msg.MessageId)
-				if mf.Verbose {
-					stdoutLog.Printf("Processing message %s", mID)
-				}
+	mf.startWorkers(ctx, jobs, wg)
 
-				msgCtx := sqsmessage.NewContext(ctx, msg)
-				if err := mf.handler(msgCtx, aws.StringValue(msg.Body)); err != nil {
-					log.Printf("[%s] handler error: %s", mID, err)
-				}
-			}
-			wg.Done()
-		}()
-	}
-
-	rcvParams := &sqs.ReceiveMessageInput{
-		QueueUrl:            mf.s.URL,
-		MaxNumberOfMessages: aws.Int64(receiveMessageBatchSize),
-		WaitTimeSeconds:     aws.Int64(receiveMessageWaitSeconds),
-		AttributeNames:      []*string{aws.String("SentTimestamp"), aws.String("ApproximateReceiveCount")},
-	}
+	messages := make(chan *sqs.Message)
+	go mf.receiveMessages(messages)
+	var done bool
 	for {
 		// Stop if the context was cancelled
 		select {
@@ -57,27 +79,13 @@ func (mf *Consumer) Run(ctx context.Context) error {
 			close(jobs)
 			wg.Wait()
 			return ctx.Err()
-		default:
-		}
-
-		resp, err := mf.s.Svc.ReceiveMessage(rcvParams)
-		if err != nil {
-			log.Println("Error receiving messages:", err)
-			log.Println("Waiting before trying again")
-			time.Sleep(mf.delayAfterReceiveError)
-			continue
-		}
-
-		if mf.Verbose {
-			stdoutLog.Printf("Received %d messages", len(resp.Messages))
-		}
-
-	HANDLE_LOOP:
-		for _, msg := range resp.Messages {
+		case msg := <-messages:
+			if done {
+				break
+			}
 			select {
-			// abort early if cancelled
 			case <-ctx.Done():
-				break HANDLE_LOOP
+				done = true
 			case jobs <- msg:
 			}
 		}
@@ -97,5 +105,5 @@ type Consumer struct {
 	s                      *SQSService
 	handler                MessageHandlerFunc
 	delayAfterReceiveError time.Duration
-	Verbose                bool
+	Logger                 func(string, ...interface{})
 }
