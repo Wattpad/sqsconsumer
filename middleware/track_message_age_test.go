@@ -2,71 +2,100 @@ package middleware
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Wattpad/sqsconsumer/sqsmessage"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 )
 
 func TestTrackMessageAge(t *testing.T) {
-	Convey("TrackMessageAge()", t, func() {
-		Convey("Given a TrackMessageAge with a callback that records updates", func() {
-			var ages []float64
-			cb := func(age float64) {
-				ages = append(ages, age)
-			}
+	ages := new(ages)
 
-			m := TrackMessageAge(10*time.Millisecond, cb)
-			fn := m(func(_ context.Context, _ string) error {
-				return nil
-			})
-			ctx := context.Background()
-
-			Convey("When tracking a message with age of 100 seconds delivered the first time", func() {
-				fn(sqsmessage.NewContext(ctx, newMessageWithAgeAndDeliveryCount(100, 1)), "")
-
-				// wait for an age update
-				time.Sleep(15 * time.Millisecond)
-
-				Convey("Should update the age callback with a value between 0 and 100 (because warming up takes time)", func() {
-					So(len(ages), ShouldBeGreaterThan, 0)
-					So(ages[0], ShouldBeBetween, 0, 100)
-				})
-			})
-
-			Convey("When tracking a message with age of 100 seconds being re-delivered", func() {
-				fn(sqsmessage.NewContext(ctx, newMessageWithAgeAndDeliveryCount(100, 2)), "")
-
-				// wait for an age update
-				time.Sleep(15 * time.Millisecond)
-
-				Convey("Should ignore the message and update the age callback with a value of 0", func() {
-					So(len(ages), ShouldBeGreaterThan, 0)
-					So(ages[0], ShouldEqual, 0)
-				})
-			})
-
-			Convey("When tracking many messages with ages of 100 seconds", func() {
-				msgCtx := sqsmessage.NewContext(ctx, newMessageWithAgeAndDeliveryCount(100, 1))
-				for i := 0; i < 2000; i++ {
-					fn(msgCtx, "")
-					time.Sleep(10 * time.Microsecond)
-				}
-
-				Convey("Should update the age callback with values progressively closer to 100", func() {
-					So(len(ages), ShouldBeGreaterThan, 3)
-					So(ages[0], ShouldBeGreaterThan, 0)
-					So(ages[1], ShouldBeGreaterThan, ages[0])
-					So(ages[2], ShouldBeGreaterThan, ages[1])
-					So(ages[2], ShouldBeBetween, 90, 100)
-				})
-			})
-		})
+	m := TrackMessageAge(10*time.Millisecond, ages.Add)
+	fn := m(func(_ context.Context, _ string) error {
+		return nil
 	})
+	ctx := context.Background()
+
+	// When tracking a message with age of 100 seconds delivered the first time
+	fn(sqsmessage.NewContext(ctx, newMessageWithAgeAndDeliveryCount(100, 1)), "")
+
+	// wait for an age update
+	time.Sleep(15 * time.Millisecond)
+
+	// Should update the age callback with a value between 0 and 100 (because warming up takes time)
+	assert.True(t, ages.Len() > 0, "at least one age")
+	vals := ages.Values()
+	assert.True(t, vals[0] > 0 && vals[0] < 100, "age between 0 and 100 (because warming up takes time)")
+}
+
+func TestTrackMessageAgeIgnoresRedelivery(t *testing.T) {
+	ages := new(ages)
+
+	m := TrackMessageAge(10*time.Millisecond, ages.Add)
+	fn := m(func(_ context.Context, _ string) error {
+		return nil
+	})
+	ctx := context.Background()
+	fn(sqsmessage.NewContext(ctx, newMessageWithAgeAndDeliveryCount(100, 2)), "")
+
+	// wait for an age update
+	time.Sleep(15 * time.Millisecond)
+
+	assert.True(t, ages.Len() > 0, "at least one age")
+	assert.Equal(t, float64(0), ages.Values()[0])
+}
+
+func TestTrackMessageAgeApproachesValue(t *testing.T) {
+	ages := new(ages)
+
+	m := TrackMessageAge(10*time.Millisecond, ages.Add)
+	fn := m(func(_ context.Context, _ string) error {
+		return nil
+	})
+	ctx := context.Background()
+
+	// When tracking many messages with ages of 100 seconds
+	msgCtx := sqsmessage.NewContext(ctx, newMessageWithAgeAndDeliveryCount(100, 1))
+	for i := 0; i < 2000; i++ {
+		fn(msgCtx, "")
+		time.Sleep(10 * time.Microsecond)
+	}
+
+	vals := ages.Values()
+	assert.True(t, len(vals) > 3, "at least 3 ages")
+	assert.True(t, vals[0] > 0, "first age greater than 0")
+	assert.True(t, vals[1] > vals[0], "second age greater than first")
+	assert.True(t, vals[2] > vals[1], "third age greater than second")
+	assert.True(t, vals[2] > 90 && vals[2] < 100, "third age between 90 and 100")
+}
+
+type ages struct {
+	sync.Mutex
+	a []float64
+}
+
+func (a *ages) Add(age float64) {
+	a.Lock()
+	a.a = append(a.a, age)
+	a.Unlock()
+}
+
+func (a *ages) Len() int {
+	a.Lock()
+	defer a.Unlock()
+	return len(a.a)
+}
+
+func (a *ages) Values() []float64 {
+	a.Lock()
+	defer a.Unlock()
+	return a.a[:]
 }
 
 const (

@@ -62,11 +62,8 @@ func main() {
 	delCtx, cancelDelete := context.WithCancel(context.Background())
 	stack := middleware.DefaultStack(delCtx, s)
 
-	// limit the total handlers running across all consumers to 20
-	limit := middleware.ConcurrentHandlerLimit(20)
-
 	// wrap the handler
-	stack = append(stack, limit, track)
+	stack = append(stack, track)
 	handler := middleware.ApplyDecoratorsToHandler(processMessage, stack...)
 
 	// start the consumers

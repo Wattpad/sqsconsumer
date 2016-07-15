@@ -34,7 +34,7 @@ func (ema *ExponentialMovingAverage) Update(value float64) float64 {
 	ema.t = now
 	ema.mu.Unlock()
 
-	return ema.v
+	return v
 }
 
 // Value gets the current average
