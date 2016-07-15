@@ -2,6 +2,7 @@ package sqsconsumer
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
@@ -12,7 +13,7 @@ func SQSServiceForQueue(queueName string, opts ...AWSConfigOption) (*SQSService,
 		o(conf)
 	}
 
-	svc := sqs.New(conf)
+	svc := sqs.New(session.New(conf))
 	s := &SQSService{Svc: svc}
 
 	var url *string
