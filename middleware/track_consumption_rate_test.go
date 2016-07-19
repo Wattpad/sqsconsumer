@@ -1,53 +1,54 @@
 package middleware
 
 import (
+	"fmt"
+	"strconv"
+	"sync"
 	"testing"
-
 	"time"
 
-	"strconv"
-
-	"fmt"
-
 	"github.com/Wattpad/sqsconsumer"
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 )
 
 func TestTrackConsumptionRateMiddleware(t *testing.T) {
-	Convey("TrackConsumptionRate()", t, func() {
-		Convey("Given a TrackConsumptionRate with a logger that just stores the output", func() {
-			log := &logAccumulator{}
-			m := TrackConsumptionRate(log, 100*time.Millisecond, "x%dx")
-			fn := m(testConfigurableDelayHandler())
-			ctx := context.Background()
+	log := &logAccumulator{}
+	m := TrackConsumptionRate(log, 100*time.Millisecond, "x%dx")
+	fn := m(testConfigurableDelayHandler())
+	ctx := context.Background()
 
-			Convey("When tracking messages that occur 1 in the first period, 2 in the second and 3 in the third", func() {
-				fn(ctx, "125") // 0ms -> 125
-				fn(ctx, "50")  // 125 -> 175
-				fn(ctx, "50")  // 175 -> 225
-				fn(ctx, "25")  // 225 -> 250
-				fn(ctx, "25")  // 250 -> 275
-				fn(ctx, "50")  // 275 -> 325 (still counts in 3rd period)
+	fn(ctx, "125") // 0ms -> 125
+	fn(ctx, "50")  // 125 -> 175
+	fn(ctx, "50")  // 175 -> 225
+	fn(ctx, "25")  // 225 -> 250
+	fn(ctx, "25")  // 250 -> 275
+	fn(ctx, "50")  // 275 -> 325 (still counts in 3rd period)
 
-				// wait for another log event
-				time.Sleep(100 * time.Millisecond)
+	// wait for another log event
+	time.Sleep(100 * time.Millisecond)
 
-				Convey("Should log counts of 1, 2, 3 and 0", func() {
-					So((*log)[0], ShouldEqual, "x1x")
-					So((*log)[1], ShouldEqual, "x2x")
-					So((*log)[2], ShouldEqual, "x3x")
-					So((*log)[3], ShouldEqual, "x0x")
-				})
-			})
-		})
-	})
+	assert.Equal(t, "x1x", log.Get(0))
+	assert.Equal(t, "x2x", log.Get(1))
+	assert.Equal(t, "x3x", log.Get(2))
+	assert.Equal(t, "x0x", log.Get(3))
 }
 
-type logAccumulator []string
+type logAccumulator struct {
+	sync.Mutex
+	v []string
+}
 
 func (l *logAccumulator) Printf(format string, a ...interface{}) {
-	*l = append(*l, fmt.Sprintf(format, a...))
+	l.Lock()
+	defer l.Unlock()
+	l.v = append(l.v, fmt.Sprintf(format, a...))
+}
+
+func (l *logAccumulator) Get(i int) string {
+	l.Lock()
+	defer l.Unlock()
+	return l.v[i]
 }
 
 // testConfigurableDelayHandler generates a handler func that will succeed after a delay as specified in the message body

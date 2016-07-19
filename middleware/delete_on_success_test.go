@@ -1,16 +1,14 @@
 package middleware
 
 import (
-	"runtime"
-	"testing"
-	"time"
-
 	"errors"
-
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"runtime"
+	"testing"
+	"time"
 
 	"github.com/Wattpad/sqsconsumer"
 	"github.com/Wattpad/sqsconsumer/mock"
@@ -18,398 +16,344 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/golang/mock/gomock"
-	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 )
 
-func TestDeleteQueueDeleteBatch(t *testing.T) {
+func TestDeleteQueueDeleteBatchSuccess(t *testing.T) {
 	// log to /dev/null because the deleter is chatty
 	log.SetOutput(ioutil.Discard)
 	defer func() {
 		log.SetOutput(os.Stderr)
 	}()
 
-	Convey("deleteQueue.deleteBatch()", t, func() {
-		ctl := gomock.NewController(t)
-		defer ctl.Finish()
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
 
-		Convey("Given the expectation that SQS DeleteMessageBatch will be invoked once and succeed", func() {
-			mSQS := mock.NewMockSQSAPI(ctl)
-			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
 
-			q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
 
-			Convey("When deleteBatch is invoked with a pair of delete request entries", func() {
-				_, err := q.deleteBatch([]*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
-				})
-
-				Convey("Then the error should be nil", func() {
-					So(err, ShouldBeNil)
-				})
-			})
-		})
-
-		Convey("Given the expectation that SQS DeleteMessageBatch will return a failure", func() {
-			mSQS := mock.NewMockSQSAPI(ctl)
-			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{
-				Failed: []*sqs.BatchResultErrorEntry{
-					&sqs.BatchResultErrorEntry{Id: aws.String("i1")},
-				},
-			}, nil)
-
-			q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
-
-			Convey("When deleteBatch is invoked with a pair of delete request entries", func() {
-				batch := []*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
-				}
-				fails, err := q.deleteBatch(batch)
-
-				Convey("Then the error should be nil (because there was a valid response)", func() {
-					assert.Nil(t, err, "Err is nil because there was a valid response")
-				})
-
-				Convey("And the failure should be returned", func() {
-					assert.Equal(t, 1, len(fails), "1 failure")
-					assert.Equal(t, batch[0], fails[0])
-				})
-			})
-		})
-
-		Convey("Given the expectation that SQS DeleteMessageBatch will return an error", func() {
-			mSQS := mock.NewMockSQSAPI(ctl)
-			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(nil, assert.AnError)
-
-			q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
-
-			Convey("When deleteBatch is invoked with a pair of delete request entries", func() {
-				_, err := q.deleteBatch([]*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
-				})
-
-				Convey("Then an error should be returned", func() {
-					So(err, ShouldNotBeNil)
-				})
-			})
-		})
+	_, err := q.deleteBatch([]*sqs.DeleteMessageBatchRequestEntry{
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
 	})
+
+	assert.Nil(t, err)
+}
+
+func TestDeleteQueueDeleteBatchFailure(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
+
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{
+		Failed: []*sqs.BatchResultErrorEntry{
+			&sqs.BatchResultErrorEntry{Id: aws.String("i1")},
+		},
+	}, nil)
+
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+
+	batch := []*sqs.DeleteMessageBatchRequestEntry{
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
+	}
+	fails, err := q.deleteBatch(batch)
+
+	assert.Nil(t, err, "Err is nil because there was a valid response")
+
+	assert.Equal(t, 1, len(fails), "1 failure")
+	assert.Equal(t, batch[0], fails[0])
+}
+
+func TestDeleteQueueDeleteBatchErrors(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
+
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(nil, assert.AnError)
+
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+
+	_, err := q.deleteBatch([]*sqs.DeleteMessageBatchRequestEntry{
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
+	})
+
+	assert.NotNil(t, err)
 }
 
 func TestDeleteQueueAddToPendingDeletes(t *testing.T) {
-	Convey("deleteQueue.addToPendingDeletes()", t, func() {
-		ctl := gomock.NewController(t)
-		defer ctl.Finish()
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
 
-		Convey("Unique messages are queued", func() {
-			Convey("Given a delete queue", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
-				q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+	mSQS := mock.NewMockSQSAPI(ctl)
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
 
-				Convey("When invoked with 2 messages with unique MessageIDs", func() {
-					q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
-					q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("2")})
+	q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
+	q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("2")})
 
-					Convey("Then the queue should contain 2 messages", func() {
-						q.Lock()
-						defer q.Unlock()
-						So(len(q.entries), ShouldEqual, 2)
-					})
-				})
-			})
-		})
-
-		Convey("Duplicate messages are ignored", func() {
-			Convey("Given a delete queue", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
-				q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
-
-				Convey("When invoked with 2 messages with the same MessageID", func() {
-					q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
-					q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
-
-					Convey("Then the queue should contain only 1 message", func() {
-						q.Lock()
-						defer q.Unlock()
-						So(len(q.entries), ShouldEqual, 1)
-					})
-				})
-			})
-		})
-	})
+	q.Lock()
+	defer q.Unlock()
+	assert.Equal(t, 2, len(q.entries))
 }
 
-func TestDeleteQueueDeleteFromPending(t *testing.T) {
+func TestDeleteQueueAddToPendingDeletesIgnoreDupes(t *testing.T) {
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+
+	q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
+	q.addToPendingDeletes(&sqs.Message{MessageId: aws.String("1")})
+
+	q.Lock()
+	defer q.Unlock()
+	assert.Equal(t, 1, len(q.entries))
+}
+
+func TestDeleteQueueDeleteFromPendingSingle(t *testing.T) {
 	// log to /dev/null because the deleter is chatty
 	log.SetOutput(ioutil.Discard)
 	defer func() {
 		log.SetOutput(os.Stderr)
 	}()
 
-	Convey("deleteQueue.deleteFromPending()", t, func() {
-		ctl := gomock.NewController(t)
-		defer ctl.Finish()
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
 
-		Convey("Given a delete queue with 1 entry in it", func() {
-			mSQS := mock.NewMockSQSAPI(ctl)
-			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
 
-			q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
-			q.entries = []*sqs.DeleteMessageBatchRequestEntry{
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("1")},
-			}
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+	q.entries = []*sqs.DeleteMessageBatchRequestEntry{
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("1")},
+	}
 
-			Convey("When invoked", func() {
-				n := q.deleteFromPending()
+	n := q.deleteFromPending()
 
-				Convey("Then the queue should be empty", func() {
-					q.Lock()
-					defer q.Unlock()
-					So(len(q.entries), ShouldEqual, 0)
-				})
-
-				Convey("And 1 message should have been deleted", func() {
-					So(n, ShouldEqual, 1)
-				})
-			})
-		})
-
-		Convey("Given a delete queue with 11 entries in it (noting the batch size is 10)", func() {
-			mSQS := mock.NewMockSQSAPI(ctl)
-			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
-
-			q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
-			q.entries = []*sqs.DeleteMessageBatchRequestEntry{
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("1")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("2")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("3")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("4")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("5")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("6")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("7")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("8")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("9")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("10")},
-				&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("11")},
-			}
-
-			Convey("When invoked", func() {
-				n := q.deleteFromPending()
-
-				Convey("Then the queue should be reduced by a batch of 10", func() {
-					q.Lock()
-					defer q.Unlock()
-					So(len(q.entries), ShouldEqual, 1)
-				})
-
-				Convey("And 10 messages should have been deleted", func() {
-					So(n, ShouldEqual, 10)
-				})
-			})
-		})
-
-		Convey("Given SQS will return 1 failure when a 2 message delete batch is requested", func() {
-			mSQS := mock.NewMockSQSAPI(ctl)
-			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{
-				Failed: []*sqs.BatchResultErrorEntry{
-					&sqs.BatchResultErrorEntry{Id: aws.String("i1")},
-				},
-			}, nil)
-
-			Convey("And a delete queue with 2 entries in it", func() {
-				q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
-				q.entries = []*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
-				}
-
-				Convey("When invoked", func() {
-					n := q.deleteFromPending()
-
-					Convey("Then the queue should be empty", func() {
-						q.Lock()
-						defer q.Unlock()
-						So(len(q.entries), ShouldEqual, 0)
-					})
-
-					Convey("And only 1 message should have been deleted", func() {
-						So(n, ShouldEqual, 1)
-					})
-				})
-			})
-		})
-
-		Convey("Given SQS will return an error", func() {
-			mSQS := mock.NewMockSQSAPI(ctl)
-			mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(nil, errors.New("an error"))
-
-			Convey("And a delete queue with 2 entries in it", func() {
-				q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
-				q.entries = []*sqs.DeleteMessageBatchRequestEntry{
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
-					&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
-				}
-
-				Convey("When invoked", func() {
-					n := q.deleteFromPending()
-
-					Convey("Then the queue should be unchanged", func() {
-						q.Lock()
-						defer q.Unlock()
-						So(len(q.entries), ShouldEqual, 2)
-					})
-
-					Convey("And the deleted count should be 0", func() {
-						So(n, ShouldEqual, 0)
-					})
-				})
-			})
-		})
-	})
+	q.Lock()
+	defer q.Unlock()
+	assert.Equal(t, 0, len(q.entries))
+	assert.Equal(t, 1, n)
 }
 
-func TestDeleteQueueStart(t *testing.T) {
+func TestDeleteQueueDeleteFromPendingExecutesBatchesOf10(t *testing.T) {
 	// log to /dev/null because the deleter is chatty
 	log.SetOutput(ioutil.Discard)
 	defer func() {
 		log.SetOutput(os.Stderr)
 	}()
 
-	Convey("deleteQueue.start()", t, func() {
-		ctl := gomock.NewController(t)
-		defer ctl.Finish()
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
 
-		Convey("Accumulates from a channel", func() {
-			Convey("Given an empty queue", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
-				q := testMakeDeleteQueueWithTimeout(mSQS, 10*time.Millisecond)
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+	q.entries = []*sqs.DeleteMessageBatchRequestEntry{
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("1")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("2")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("3")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("4")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("5")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("6")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("7")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("8")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("9")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("10")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("11")},
+	}
 
-				Convey("When the queue is started", func() {
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
-					go q.start(ctx)
+	n := q.deleteFromPending()
 
-					Convey("And a message is written to the queue channel", func() {
-						q.queue <- &sqs.Message{MessageId: aws.String("1")}
+	q.Lock()
+	defer q.Unlock()
+	assert.Equal(t, 1, len(q.entries))
+	assert.Equal(t, 10, n)
+}
 
-						Convey("Then the queue has one entry", func() {
-							q.Lock()
-							defer q.Unlock()
-							So(len(q.entries), ShouldEqual, 1)
-						})
-					})
-				})
-			})
-		})
+func TestDeleteQueueDeleteFromPending1Failure(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
 
-		Convey("Does not leak goroutines", func() {
-			Convey("Given a running queue", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{
+		Failed: []*sqs.BatchResultErrorEntry{
+			&sqs.BatchResultErrorEntry{Id: aws.String("i1")},
+		},
+	}, nil)
 
-				// convey uses goroutines, so must do everything in the leaf node because we care about routine count
-				Convey("When the queue context is cancelled", func() {
-					Convey("And the queue is given time to clean up", func() {
-						Convey("Then the number of goroutines has not changed relative to the number running before starting", func() {
-							// pause for Convey's goroutine mess to stabilize
-							time.Sleep(time.Millisecond)
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+	q.entries = []*sqs.DeleteMessageBatchRequestEntry{
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
+	}
 
-							// note the number of goroutines before starting
-							n := runtime.NumGoroutine()
+	n := q.deleteFromPending()
 
-							// create the queue and run it
-							q := testMakeDeleteQueueWithTimeout(mSQS, 10*time.Millisecond)
-							ctx, cancel := context.WithCancel(context.Background())
-							go q.start(ctx)
+	assert.Equal(t, 0, len(q.entries))
+	assert.Equal(t, 1, n)
+}
 
-							// cancel the queue context and pause to let the number of routines to stabilize
-							cancel()
-							time.Sleep(time.Millisecond)
+func TestDeleteQueueDeleteFromPendingSQSError(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
 
-							// verify no routines leaked
-							So(runtime.NumGoroutine(), ShouldEqual, n)
-						})
-					})
-				})
-			})
-		})
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(nil, errors.New("an error"))
 
-		Convey("Deletes batches after a timeout", func() {
-			Convey("Given an SQS expectation that the delete function will be invoked once", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
-				mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	q := testMakeDeleteQueueWithTimeout(mSQS, time.Millisecond)
+	q.entries = []*sqs.DeleteMessageBatchRequestEntry{
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r1"), Id: aws.String("i1")},
+		&sqs.DeleteMessageBatchRequestEntry{ReceiptHandle: aws.String("r2"), Id: aws.String("i2")},
+	}
 
-				Convey("And a running queue with a timeout of 10ms", func() {
-					q := testMakeDeleteQueueWithTimeout(mSQS, 10*time.Millisecond)
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
-					go q.start(ctx)
+	n := q.deleteFromPending()
 
-					Convey("When a message is added to the queue (knowing the batch size is more than 1 item)", func() {
-						q.queue <- &sqs.Message{MessageId: aws.String("1")}
+	q.Lock()
+	defer q.Unlock()
+	assert.Equal(t, 2, len(q.entries))
+	assert.Equal(t, 0, n)
+}
 
-						Convey("And more than 10ms passes with no more messages", func() {
-							time.Sleep(15 * time.Millisecond)
+func TestDeleteQueueStartAccumulatesFromAChannel(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
 
-							Convey("Then the expectation is satisfied", func() {
-								ctl.Finish()
-							})
-						})
-					})
-				})
-			})
-		})
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
 
-		Convey("Deletes batches when 10 accumulate", func() {
-			Convey("Given a running queue with a timeout of 10ms", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
-				q := testMakeDeleteQueueWithTimeout(mSQS, 10*time.Millisecond)
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				go q.start(ctx)
+	mSQS := mock.NewMockSQSAPI(ctl)
+	q := testMakeDeleteQueueWithTimeout(mSQS, 10*time.Millisecond)
 
-				Convey("When 9 messages are added to the queue (knowing the batch size is 10)", func() {
-					q.queue <- &sqs.Message{MessageId: aws.String("1")}
-					q.queue <- &sqs.Message{MessageId: aws.String("2")}
-					q.queue <- &sqs.Message{MessageId: aws.String("3")}
-					q.queue <- &sqs.Message{MessageId: aws.String("4")}
-					q.queue <- &sqs.Message{MessageId: aws.String("5")}
-					q.queue <- &sqs.Message{MessageId: aws.String("6")}
-					q.queue <- &sqs.Message{MessageId: aws.String("7")}
-					q.queue <- &sqs.Message{MessageId: aws.String("8")}
-					q.queue <- &sqs.Message{MessageId: aws.String("9")}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go q.start(ctx)
 
-					Convey("After a short wait to give the queue time to run", func() {
-						time.Sleep(2 * time.Millisecond)
+	q.queue <- &sqs.Message{MessageId: aws.String("1")}
 
-						Convey("Then SQS DeleteMessageBatch was not invoked", func() {
-							// finish verifies the expectation, which is empty
-							ctl.Finish()
+	q.Lock()
+	defer q.Unlock()
+	assert.Len(t, q.entries, 1)
+}
 
-							Convey("When the expectation is configured on the SQS mock", func() {
-								mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
+func TestDeleteQueueStartDoesNotLeakRoutines(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
 
-								Convey("And a 10th message is added to the queue", func() {
-									q.queue <- &sqs.Message{MessageId: aws.String("10")}
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
 
-									Convey("After a short wait to give the queue time to run", func() {
-										time.Sleep(2 * time.Millisecond)
+	// pause for Convey's goroutine mess to stabilize
+	time.Sleep(time.Millisecond)
 
-										Convey("Then the expectation is satisfied", func() {
-											ctl.Finish()
-										})
-									})
-								})
-							})
-						})
-					})
-				})
-			})
-		})
-	})
+	// note the number of goroutines before starting
+	n := runtime.NumGoroutine()
+
+	// create the queue and run it
+	q := testMakeDeleteQueueWithTimeout(mSQS, 10*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	go q.start(ctx)
+
+	// cancel the queue context and pause to let the number of routines to stabilize
+	cancel()
+	time.Sleep(time.Millisecond)
+
+	// verify no routines leaked
+	assert.Equal(t, n, runtime.NumGoroutine())
+}
+
+func TestDeleteQueueStartDeletesBatchesAfterTimeout(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
+
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
+
+	q := testMakeDeleteQueueWithTimeout(mSQS, 10*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go q.start(ctx)
+
+	q.queue <- &sqs.Message{MessageId: aws.String("1")}
+
+	time.Sleep(15 * time.Millisecond)
+
+	ctl.Finish()
+}
+
+func TestDeleteQueueStartDeletesBatchesOf10(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
+
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
+	q := testMakeDeleteQueueWithTimeout(mSQS, 10*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go q.start(ctx)
+
+	q.queue <- &sqs.Message{MessageId: aws.String("1")}
+	q.queue <- &sqs.Message{MessageId: aws.String("2")}
+	q.queue <- &sqs.Message{MessageId: aws.String("3")}
+	q.queue <- &sqs.Message{MessageId: aws.String("4")}
+	q.queue <- &sqs.Message{MessageId: aws.String("5")}
+	q.queue <- &sqs.Message{MessageId: aws.String("6")}
+	q.queue <- &sqs.Message{MessageId: aws.String("7")}
+	q.queue <- &sqs.Message{MessageId: aws.String("8")}
+	q.queue <- &sqs.Message{MessageId: aws.String("9")}
+
+	time.Sleep(2 * time.Millisecond)
+
+	// finish verifies the expectation, which is empty
+	ctl.Finish()
+
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
+
+	q.queue <- &sqs.Message{MessageId: aws.String("10")}
+
+	time.Sleep(2 * time.Millisecond)
+
+	ctl.Finish()
 }
 
 func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
@@ -419,140 +363,108 @@ func TestSQSBatchDeleteOnSuccessWithTimeout(t *testing.T) {
 		log.SetOutput(os.Stderr)
 	}()
 
-	Convey("SQSBatchDeleteOnSuccessWithTimeout()", t, func() {
-		ctl := gomock.NewController(t)
-		defer ctl.Finish()
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
 
-		Convey("Deletes batches after a timeout", func() {
-			Convey("Given an SQS expectation that the delete function will be invoked once", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
-				mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	mSQS := mock.NewMockSQSAPI(ctl)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
 
-				Convey("And a running queue with a timeout of 10ms", func() {
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-					u := "a/url"
-					srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
+	u := "a/url"
+	srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
 
-					deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
+	deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
 
-					Convey("And a handler that always returns success", func() {
-						handler := func(_ context.Context, _ string) error { return nil }
-						handler = deleter(handler)
+	handler := func(_ context.Context, _ string) error { return nil }
+	handler = deleter(handler)
 
-						Convey("When a message is successfully processed", func() {
-							msg := &sqs.Message{MessageId: aws.String("1"), Body: aws.String("message")}
-							msgCtx := sqsmessage.NewContext(ctx, msg)
-							handler(msgCtx, *msg.Body)
+	msg := &sqs.Message{MessageId: aws.String("1"), Body: aws.String("message")}
+	msgCtx := sqsmessage.NewContext(ctx, msg)
+	handler(msgCtx, *msg.Body)
 
-							Convey("And more than 10ms passes with no more messages", func() {
-								time.Sleep(15 * time.Millisecond)
+	time.Sleep(15 * time.Millisecond)
 
-								Convey("Then the expectation is satisfied (deletion was invoked)", func() {
-									ctl.Finish()
-								})
-							})
-						})
-					})
-				})
-			})
-		})
+	ctl.Finish()
+}
 
-		Convey("Deletes batches when 10 accumulate", func() {
-			Convey("Given an SQS expectation that the delete function will not be invoked", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
+func TestSQSBatchDeleteOnSuccessWithTimeoutAfter10Messages(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
 
-				Convey("And a running queue with a timeout of 10ms", func() {
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
 
-					u := "a/url"
-					srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-					deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
+	u := "a/url"
+	srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
 
-					Convey("And a handler that always returns success", func() {
-						handler := func(_ context.Context, _ string) error { return nil }
-						handler = deleter(handler)
+	deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
 
-						Convey("When 9 messages are successfully processed", func() {
-							for i := 1; i <= 9; i++ {
-								msg := &sqs.Message{
-									MessageId: aws.String(fmt.Sprintf("%d", i)),
-									Body:      aws.String("message"),
-								}
-								msgCtx := sqsmessage.NewContext(ctx, msg)
-								handler(msgCtx, *msg.Body)
-							}
+	handler := func(_ context.Context, _ string) error { return nil }
+	handler = deleter(handler)
 
-							Convey("After a short wait to give the queue time to run", func() {
-								time.Sleep(2 * time.Millisecond)
+	for i := 1; i <= 9; i++ {
+		msg := &sqs.Message{
+			MessageId: aws.String(fmt.Sprintf("%d", i)),
+			Body:      aws.String("message"),
+		}
+		msgCtx := sqsmessage.NewContext(ctx, msg)
+		handler(msgCtx, *msg.Body)
+	}
 
-								Convey("Then SQS DeleteMessageBatch was not invoked", func() {
-									// finish verifies the expectation, which is empty
-									ctl.Finish()
+	time.Sleep(2 * time.Millisecond)
 
-									Convey("When the expectation is configured on the SQS mock", func() {
-										mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	// finish verifies the expectation, which is empty
+	ctl.Finish()
 
-										Convey("And a 10th message is added to the queue", func() {
-											msg := &sqs.Message{MessageId: aws.String("10"), Body: aws.String("message")}
-											msgCtx := sqsmessage.NewContext(ctx, msg)
-											handler(msgCtx, *msg.Body)
+	mSQS.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil)
 
-											Convey("After a short wait to give the queue time to run", func() {
-												time.Sleep(2 * time.Millisecond)
+	msg := &sqs.Message{MessageId: aws.String("10"), Body: aws.String("message")}
+	msgCtx := sqsmessage.NewContext(ctx, msg)
+	handler(msgCtx, *msg.Body)
 
-												Convey("Then the expectation is satisfied (deletion was invoked)", func() {
-													ctl.Finish()
-												})
-											})
-										})
-									})
-								})
-							})
-						})
-					})
-				})
-			})
-		})
+	time.Sleep(2 * time.Millisecond)
 
-		Convey("Does not delete on error", func() {
-			Convey("Given an SQS expectation that the delete function will not be invoked", func() {
-				mSQS := mock.NewMockSQSAPI(ctl)
+	ctl.Finish()
+}
 
-				Convey("And a running queue with a timeout of 10ms", func() {
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
+func TestSQSBatchDeleteOnSuccessWithTimeoutDoesNotDeleteOnError(t *testing.T) {
+	// log to /dev/null because the deleter is chatty
+	log.SetOutput(ioutil.Discard)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
 
-					u := "a/url"
-					srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+	mSQS := mock.NewMockSQSAPI(ctl)
 
-					deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-					Convey("And a handler that always returns an error", func() {
-						handler := func(_ context.Context, _ string) error { return errors.New("an error") }
-						handler = deleter(handler)
+	u := "a/url"
+	srv := &sqsconsumer.SQSService{Svc: mSQS, URL: &u}
 
-						Convey("When a message fails to process", func() {
-							msg := &sqs.Message{MessageId: aws.String("1"), Body: aws.String("message")}
-							msgCtx := sqsmessage.NewContext(ctx, msg)
-							handler(msgCtx, *msg.Body)
+	deleter := SQSBatchDeleteOnSuccessWithTimeout(ctx, srv, 10*time.Millisecond)
 
-							Convey("And more than 10ms passes with no more messages", func() {
-								time.Sleep(15 * time.Millisecond)
+	handler := func(_ context.Context, _ string) error { return errors.New("an error") }
+	handler = deleter(handler)
 
-								Convey("Then the expectation is satisfied (deletion was not invoked)", func() {
-									ctl.Finish()
-								})
-							})
-						})
-					})
-				})
-			})
-		})
-	})
+	msg := &sqs.Message{MessageId: aws.String("1"), Body: aws.String("message")}
+	msgCtx := sqsmessage.NewContext(ctx, msg)
+	handler(msgCtx, *msg.Body)
+
+	time.Sleep(15 * time.Millisecond)
+
+	ctl.Finish()
 }
 
 func testMakeDeleteQueueWithTimeout(s sqsconsumer.SQSAPI, timeout time.Duration) *deleteQueue {

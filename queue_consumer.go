@@ -17,6 +17,7 @@ func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 		s:                      s,
 		handler:                handler,
 		delayAfterReceiveError: defaultDelayAfterReceiveError,
+		WaitSeconds:            defaultReceiveMessageWaitSeconds,
 	}
 }
 
@@ -46,7 +47,7 @@ func (mf *Consumer) Run(ctx context.Context) error {
 	rcvParams := &sqs.ReceiveMessageInput{
 		QueueUrl:            mf.s.URL,
 		MaxNumberOfMessages: aws.Int64(receiveMessageBatchSize),
-		WaitTimeSeconds:     aws.Int64(receiveMessageWaitSeconds),
+		WaitTimeSeconds:     aws.Int64(mf.WaitSeconds),
 		AttributeNames:      []*string{aws.String("SentTimestamp"), aws.String("ApproximateReceiveCount")},
 	}
 	for {
@@ -88,8 +89,8 @@ const (
 	defaultDelayAfterReceiveError = 5 * time.Second
 
 	// AWS maximums
-	receiveMessageBatchSize   = 10
-	receiveMessageWaitSeconds = 20
+	receiveMessageBatchSize          = 10
+	defaultReceiveMessageWaitSeconds = 20
 )
 
 // Consumer is an SQS queue consumer
@@ -98,4 +99,5 @@ type Consumer struct {
 	handler                MessageHandlerFunc
 	delayAfterReceiveError time.Duration
 	Verbose                bool
+	WaitSeconds            int64
 }
