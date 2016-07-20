@@ -175,9 +175,9 @@ func TestQueueConsumerRunRetriesOnErrors(t *testing.T) {
 	defer ctl.Finish()
 
 	// delay so that the cancel occurs after 2 receives
-	receiveCount := 0
+	var receiveCount int64
 	delay := func(x interface{}) {
-		receiveCount++
+		atomic.AddInt64(&receiveCount, 1)
 		time.Sleep(2 * time.Millisecond)
 	}
 	m := mock.NewMockSQSAPI(ctl)
@@ -193,7 +193,7 @@ func TestQueueConsumerRunRetriesOnErrors(t *testing.T) {
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Millisecond)
 	q.Run(ctx)
 
-	assert.InDelta(t, 2, receiveCount, 1, "ReceiveMessage should have been retried 1-3 times")
+	assert.InDelta(t, 2, atomic.LoadInt64(&receiveCount), 1, "ReceiveMessage should have been retried 1-3 times")
 
 	time.Sleep(time.Millisecond) // time for goroutines to end
 	assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines")
