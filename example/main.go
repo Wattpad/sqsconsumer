@@ -1,23 +1,19 @@
 package main
 
 import (
+	"expvar"
+	"fmt"
 	"log"
+	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
-	"time"
-
-	"fmt"
-	"math/rand"
-
-	goexpvar "expvar"
-	"net/http"
 	"runtime"
-
 	"sync"
+	"time"
 
 	"github.com/Wattpad/sqsconsumer"
 	"github.com/Wattpad/sqsconsumer/middleware"
-	"github.com/go-kit/kit/metrics/expvar"
 	"golang.org/x/net/context"
 )
 
@@ -25,7 +21,7 @@ import (
 var revision = "UNKNOWN"
 
 func init() {
-	goexpvar.NewString("version").Set(revision)
+	expvar.NewString("version").Set(revision)
 }
 
 func main() {
@@ -53,9 +49,9 @@ func main() {
 
 	// set up metrics - note TrackMetrics does not run the http server, and uses expvar
 	exposeMetrics()
-	ms := fmt.Sprintf("%s.success", queueName)
-	mf := fmt.Sprintf("%s.fail", queueName)
-	mt := fmt.Sprintf("%s.time", queueName)
+	ms := expvar.NewInt(fmt.Sprintf("%s.success", queueName))
+	mf := expvar.NewInt(fmt.Sprintf("%s.fail", queueName))
+	mt := expvar.NewFloat(fmt.Sprintf("%s.time", queueName))
 	track := middleware.TrackMetrics(ms, mf, mt)
 
 	// set up middleware stack for each consumer
@@ -119,14 +115,14 @@ func processMessage(ctx context.Context, msg string) error {
 
 // exposeMetrics adds expvar metrics updated every 5 seconds and runs the HTTP server to expose them.
 func exposeMetrics() {
-	goroutines := expvar.NewGauge("total_goroutines")
-	uptime := expvar.NewGauge("process_uptime_seconds")
+	goroutines := expvar.NewInt("total_goroutines")
+	uptime := expvar.NewFloat("process_uptime_seconds")
 
 	start := time.Now()
 
 	go func() {
 		for range time.Tick(5 * time.Second) {
-			goroutines.Set(float64(runtime.NumGoroutine()))
+			goroutines.Set(int64(runtime.NumGoroutine()))
 			uptime.Set(time.Since(start).Seconds())
 		}
 	}()
