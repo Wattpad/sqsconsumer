@@ -1,32 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
-	"time"
-
-	"fmt"
-	"math/rand"
-
-	goexpvar "expvar"
-	"net/http"
-	"runtime"
-
 	"sync"
 
 	"github.com/Wattpad/sqsconsumer"
 	"github.com/Wattpad/sqsconsumer/middleware"
-	"github.com/go-kit/kit/metrics/expvar"
 	"golang.org/x/net/context"
 )
-
-// build with -ldflags "-X main.revision a123"
-var revision = "UNKNOWN"
-
-func init() {
-	goexpvar.NewString("version").Set(revision)
-}
 
 func main() {
 	region := "us-east-1"
@@ -51,19 +36,11 @@ func main() {
 		cancelFetch()
 	}()
 
-	// set up metrics - note TrackMetrics does not run the http server, and uses expvar
-	exposeMetrics()
-	ms := fmt.Sprintf("%s.success", queueName)
-	mf := fmt.Sprintf("%s.fail", queueName)
-	mt := fmt.Sprintf("%s.time", queueName)
-	track := middleware.TrackMetrics(ms, mf, mt)
-
 	// set up middleware stack for each consumer
 	delCtx, cancelDelete := context.WithCancel(context.Background())
 	stack := middleware.DefaultStack(delCtx, s)
 
 	// wrap the handler
-	stack = append(stack, track)
 	handler := middleware.ApplyDecoratorsToHandler(processMessage, stack...)
 
 	// start the consumers
@@ -115,22 +92,4 @@ func processMessage(ctx context.Context, msg string) error {
 	// do the "work"
 	log.Printf("MSG: '%s'", msg)
 	return nil
-}
-
-// exposeMetrics adds expvar metrics updated every 5 seconds and runs the HTTP server to expose them.
-func exposeMetrics() {
-	goroutines := expvar.NewGauge("total_goroutines")
-	uptime := expvar.NewGauge("process_uptime_seconds")
-
-	start := time.Now()
-
-	go func() {
-		for range time.Tick(5 * time.Second) {
-			goroutines.Set(float64(runtime.NumGoroutine()))
-			uptime.Set(time.Since(start).Seconds())
-		}
-	}()
-
-	log.Println("Expvars at http://localhost:8123/debug/vars")
-	go http.ListenAndServe(":8123", nil)
 }
