@@ -45,6 +45,7 @@ func TestQueueConsumerRunProcessesMessages(t *testing.T) {
 	// return 2 messages the first time, and an error the second time
 	first := m.EXPECT().ReceiveMessage(gomock.Any()).Do(delay).Return(received, nil)
 	m.EXPECT().ReceiveMessage(gomock.Any()).Do(delay).Return(nil, assert.AnError).After(first).AnyTimes()
+	m.EXPECT().DeleteMessageBatch(gomock.Any()).AnyTimes().Return(&sqs.DeleteMessageBatchOutput{}, nil)
 
 	// count messages processed
 	var callCount int64
@@ -56,6 +57,7 @@ func TestQueueConsumerRunProcessesMessages(t *testing.T) {
 	s := &SQSService{Svc: m}
 	q := NewConsumer(s, fn)
 	q.delayAfterReceiveError = time.Millisecond
+	q.DeleteMessageDrainTimeout = 25 * time.Millisecond
 
 	// wait long enough to ensure ReceiveMessage is running
 	ctx, _ := context.WithTimeout(context.Background(), 15*time.Millisecond)
@@ -68,9 +70,7 @@ func TestQueueConsumerRunProcessesMessages(t *testing.T) {
 
 	// ensure no routines were leaked other than the receive messages goroutine (leaks on purpose)
 	time.Sleep(time.Millisecond)
-	if !assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines") {
-		panic(1)
-	}
+	assert.InDelta(t, ngo, runtime.NumGoroutine(), 2, "Should not leak goroutines")
 
 	// ensure all messages were processed
 	assert.Equal(t, int64(2), callCount)
@@ -104,6 +104,8 @@ func TestQueueConsumerRunDoesNotFetchMoreMessagesThanItCanProcess(t *testing.T) 
 
 	// return 10 messages - the first 10 will never finish so the second batch will block and there will be no third request
 	m.EXPECT().ReceiveMessage(gomock.Any()).Return(received, nil).Times(2)
+	m.EXPECT().DeleteMessageBatch(gomock.Any()).AnyTimes().Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	m.EXPECT().ChangeMessageVisibilityBatch(gomock.Any()).AnyTimes()
 
 	// hang until cancelled
 	fn := func(ctx context.Context, msg string) error {
@@ -114,6 +116,7 @@ func TestQueueConsumerRunDoesNotFetchMoreMessagesThanItCanProcess(t *testing.T) 
 	s := &SQSService{Svc: m}
 	q := NewConsumer(s, fn)
 	q.delayAfterReceiveError = time.Millisecond
+	q.DeleteMessageDrainTimeout = 25 * time.Millisecond
 
 	// wait long enough to ensure ReceiveMessage would have been invoked multiple times if it was too greedy
 	ctx, _ := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -126,9 +129,7 @@ func TestQueueConsumerRunDoesNotFetchMoreMessagesThanItCanProcess(t *testing.T) 
 
 	// ensure no routines were leaked
 	time.Sleep(time.Millisecond)
-	if !assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines") {
-		panic(1)
-	}
+	assert.InDelta(t, ngo, runtime.NumGoroutine(), 2, "Should not leak goroutines")
 }
 
 func TestQueueConsumerRunStopsGracefullyWhenCancelled(t *testing.T) {
@@ -147,8 +148,10 @@ func TestQueueConsumerRunStopsGracefullyWhenCancelled(t *testing.T) {
 	}
 	m := mock.NewMockSQSAPI(ctl)
 	m.EXPECT().ReceiveMessage(gomock.Any()).Do(delay).Return(&sqs.ReceiveMessageOutput{}, nil).AnyTimes()
-	s := &SQSService{Svc: m}
+	m.EXPECT().DeleteMessageBatch(gomock.Any()).AnyTimes().Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	m.EXPECT().ChangeMessageVisibilityBatch(gomock.Any()).AnyTimes()
 
+	s := &SQSService{Svc: m}
 	q := NewConsumer(s, noop)
 	q.delayAfterReceiveError = time.Millisecond
 
@@ -161,7 +164,7 @@ func TestQueueConsumerRunStopsGracefullyWhenCancelled(t *testing.T) {
 	assert.Error(t, err)
 
 	time.Sleep(time.Millisecond) // time for goroutines to end
-	assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines")
+	assert.InDelta(t, ngo, runtime.NumGoroutine(), 2, "Should not leak goroutines")
 }
 
 func TestQueueConsumerRunRetriesOnErrors(t *testing.T) {
@@ -182,10 +185,13 @@ func TestQueueConsumerRunRetriesOnErrors(t *testing.T) {
 	}
 	m := mock.NewMockSQSAPI(ctl)
 	m.EXPECT().ReceiveMessage(gomock.Any()).Do(delay).Return(nil, assert.AnError).AnyTimes()
+	m.EXPECT().DeleteMessageBatch(gomock.Any()).AnyTimes().Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	m.EXPECT().ChangeMessageVisibilityBatch(gomock.Any()).AnyTimes()
 	s := &SQSService{Svc: m}
 
 	q := NewConsumer(s, noop)
 	q.delayAfterReceiveError = time.Millisecond
+	q.DeleteMessageDrainTimeout = 25 * time.Millisecond
 
 	ngo := runtime.NumGoroutine()
 
@@ -196,7 +202,7 @@ func TestQueueConsumerRunRetriesOnErrors(t *testing.T) {
 	assert.InDelta(t, 2, atomic.LoadInt64(&receiveCount), 1, "ReceiveMessage should have been retried 1-3 times")
 
 	time.Sleep(time.Millisecond) // time for goroutines to end
-	assert.Equal(t, ngo+1, runtime.NumGoroutine(), "Should not leak goroutines")
+	assert.InDelta(t, ngo, runtime.NumGoroutine(), 2, "Should not leak goroutines")
 }
 
 func noop(ctx context.Context, msg string) error {

@@ -29,15 +29,15 @@ func (_m *MockSQSAPI) EXPECT() *_MockSQSAPIRecorder {
 	return _m.recorder
 }
 
-func (_m *MockSQSAPI) ChangeMessageVisibility(_param0 *sqs.ChangeMessageVisibilityInput) (*sqs.ChangeMessageVisibilityOutput, error) {
-	ret := _m.ctrl.Call(_m, "ChangeMessageVisibility", _param0)
-	ret0, _ := ret[0].(*sqs.ChangeMessageVisibilityOutput)
+func (_m *MockSQSAPI) ChangeMessageVisibilityBatch(_param0 *sqs.ChangeMessageVisibilityBatchInput) (*sqs.ChangeMessageVisibilityBatchOutput, error) {
+	ret := _m.ctrl.Call(_m, "ChangeMessageVisibilityBatch", _param0)
+	ret0, _ := ret[0].(*sqs.ChangeMessageVisibilityBatchOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-func (_mr *_MockSQSAPIRecorder) ChangeMessageVisibility(arg0 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "ChangeMessageVisibility", arg0)
+func (_mr *_MockSQSAPIRecorder) ChangeMessageVisibilityBatch(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "ChangeMessageVisibilityBatch", arg0)
 }
 
 func (_m *MockSQSAPI) CreateQueue(_param0 *sqs.CreateQueueInput) (*sqs.CreateQueueOutput, error) {

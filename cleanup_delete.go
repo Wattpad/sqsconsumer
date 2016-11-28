@@ -1,12 +1,10 @@
-package middleware
+package sqsconsumer
 
 import (
 	"log"
 	"sync"
 	"time"
 
-	"github.com/Wattpad/sqsconsumer"
-	"github.com/Wattpad/sqsconsumer/sqsmessage"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"golang.org/x/net/context"
@@ -17,40 +15,24 @@ type deleteQueue struct {
 	sync.Mutex
 	entries []*sqs.DeleteMessageBatchRequestEntry
 
-	svc                 sqsconsumer.SQSAPI
+	svc                 SQSAPI
 	url                 *string
+	drainTimeout        time.Duration
 	accumulationTimeout time.Duration
 }
 
-// SQSBatchDeleteOnSuccessWithTimeout decorates a MessageHandler to delete the message if processing succeeded.
-func SQSBatchDeleteOnSuccessWithTimeout(ctx context.Context, s *sqsconsumer.SQSService, after time.Duration) MessageHandlerDecorator {
+// NewBatchDeleter starts a batch deleter routine that deletes messages after they are sent to the returned channel
+func NewBatchDeleter(ctx context.Context, wg *sync.WaitGroup, s *SQSService, every, drainTimeout time.Duration) chan<- *sqs.Message {
 	dq := &deleteQueue{
 		svc:                 s.Svc,
 		url:                 s.URL,
-		accumulationTimeout: after,
+		accumulationTimeout: every,
+		drainTimeout:        drainTimeout,
 		queue:               make(chan *sqs.Message),
 	}
-
-	return func(fn sqsconsumer.MessageHandlerFunc) sqsconsumer.MessageHandlerFunc {
-		go dq.start(ctx)
-
-		return func(msgCtx context.Context, msg string) error {
-			// process the message
-			err := fn(msgCtx, msg)
-
-			if err != nil {
-				// processing failure. do not delete so that it will be redelivered
-				log.Printf("Error processing message '%s': %s.", msg, err)
-			} else {
-				sqsMsg, ok := sqsmessage.FromContext(msgCtx)
-				if ok {
-					dq.queue <- sqsMsg
-				}
-			}
-
-			return err
-		}
-	}
+	wg.Add(1)
+	go dq.start(ctx, wg)
+	return dq.queue
 }
 
 func (dq *deleteQueue) addToPendingDeletes(msg *sqs.Message) {
@@ -94,17 +76,14 @@ func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) (
 	return failed, nil
 }
 
-// AWS limits batch sizes to 10 messages
-const deleteBatchSizeLimit = 10
-
 // deleteFromPending returns the number of messages deleted.
 func (dq *deleteQueue) deleteFromPending() int {
 	dq.Lock()
 	defer dq.Unlock()
 
 	n := len(dq.entries)
-	if n > deleteBatchSizeLimit {
-		n = deleteBatchSizeLimit
+	if n > awsBatchSizeLimit {
+		n = awsBatchSizeLimit
 	}
 	fails, err := dq.deleteBatch(dq.entries[:n])
 	if err != nil {
@@ -123,25 +102,18 @@ func (dq *deleteQueue) deleteFromPending() int {
 	return n
 }
 
-func (dq *deleteQueue) start(ctx context.Context) {
+func (dq *deleteQueue) start(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	// read from the delete queue accumulating batches and running delete every 10 items or 250ms
 	for {
 		select {
-		case <-ctx.Done():
-			// drain the delete queue and return
-			for {
-				select {
-				case <-dq.queue:
-				default:
-					return
-				}
-			}
 		case msg := <-dq.queue:
 			dq.addToPendingDeletes(msg)
 			dq.Lock()
 			n := len(dq.entries)
 			dq.Unlock()
-			if n >= deleteBatchSizeLimit {
+			if n >= awsBatchSizeLimit {
 				dq.deleteFromPending()
 			}
 		case <-time.After(dq.accumulationTimeout):
@@ -151,6 +123,30 @@ func (dq *deleteQueue) start(ctx context.Context) {
 			if n > 0 {
 				dq.deleteFromPending()
 			}
+		}
+		select {
+		case <-ctx.Done():
+			dq.drain()
+			// drain the delete queue and return
+			go func() {
+				for {
+					<-dq.queue
+				}
+			}()
+			return
+		default:
+		}
+	}
+}
+
+func (dq *deleteQueue) drain() {
+	for {
+		select {
+		case msg := <-dq.queue:
+			dq.addToPendingDeletes(msg)
+			dq.deleteFromPending()
+		case <-time.After(dq.drainTimeout):
+			return
 		}
 	}
 }

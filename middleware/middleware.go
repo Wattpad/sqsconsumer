@@ -1,11 +1,6 @@
 package middleware
 
-import (
-	"time"
-
-	"github.com/Wattpad/sqsconsumer"
-	"golang.org/x/net/context"
-)
+import "github.com/Wattpad/sqsconsumer"
 
 // MessageHandlerDecorator is a decorator that can be applied to a handler.
 type MessageHandlerDecorator func(sqsconsumer.MessageHandlerFunc) sqsconsumer.MessageHandlerFunc
@@ -16,14 +11,4 @@ func ApplyDecoratorsToHandler(fn sqsconsumer.MessageHandlerFunc, ds ...MessageHa
 		fn = ds[i](fn)
 	}
 	return fn
-}
-
-const defaultDeleteBatchTimeout = 250 * time.Millisecond
-
-// DefaultStack returns a base SQS middleware stack which will extend visibility timeouts as long as a handler is running and delete messages on success.
-// When the context is cancelled it will clean up the delete queue.
-func DefaultStack(ctx context.Context, s *sqsconsumer.SQSService) []MessageHandlerDecorator {
-	extend := SQSVisibilityTimeoutExtender(s)
-	delete := SQSBatchDeleteOnSuccessWithTimeout(ctx, s, defaultDeleteBatchTimeout)
-	return []MessageHandlerDecorator{extend, delete}
 }

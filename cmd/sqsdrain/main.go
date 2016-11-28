@@ -10,7 +10,6 @@ import (
 	"os/signal"
 
 	"github.com/Wattpad/sqsconsumer"
-	"github.com/Wattpad/sqsconsumer/middleware"
 	"golang.org/x/net/context"
 )
 
@@ -68,20 +67,10 @@ func (w *worker) Run(ctx context.Context) {
 		log.Fatalf("ERROR Could not set up queue '%s': %s\n", w.Queue, err)
 	}
 
-	// deleter context should only be cancelled after the consumer is really done
-	delCtx, cancelDelete := context.WithCancel(context.Background())
-	stack := middleware.DefaultStack(delCtx, sqs)
-
-	// wrap the worker
-	handler := middleware.ApplyDecoratorsToHandler(w.HandleMessage, stack...)
-
 	// create the consumer bound to a queue and processor function and start running it with a context that will be cancelled when a graceful shutdown is requested
 	log.Printf("Starting consumer for SQS queue: %s", w.Queue)
-	sc := sqsconsumer.NewConsumer(sqs, handler)
+	sc := sqsconsumer.NewConsumer(sqs, w.HandleMessage)
 	sc.Run(ctx)
-
-	// only after the consumer is done should the deleter stop
-	cancelDelete()
 	log.Println("Shutdown complete")
 }
 
