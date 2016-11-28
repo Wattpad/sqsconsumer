@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"golang.org/x/net/context"
 )
@@ -51,7 +50,7 @@ func (dq *deleteQueue) addToPendingDeletes(msg *sqs.Message) {
 	})
 }
 
-// deleteBatch deletes up to 10 messages and returns the list of messages that failed to delete or an error for overall failure.
+// deleteBatch deletes a batch of messages and returns the list of messages that failed to delete or an error for overall failure.
 func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) ([]*sqs.DeleteMessageBatchRequestEntry, error) {
 	req := &sqs.DeleteMessageBatchInput{
 		QueueUrl: dq.url,
@@ -76,8 +75,8 @@ func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) (
 	return failed, nil
 }
 
-// deleteFromPending returns the number of messages deleted.
-func (dq *deleteQueue) deleteFromPending() int {
+// deleteFromPending prepares a batch of messages and deletes them
+func (dq *deleteQueue) deleteFromPending() {
 	dq.Lock()
 	defer dq.Unlock()
 
@@ -88,18 +87,14 @@ func (dq *deleteQueue) deleteFromPending() int {
 	fails, err := dq.deleteBatch(dq.entries[:n])
 	if err != nil {
 		log.Printf("Error deleting batch: %s", err)
-		return 0
+		return
 	}
 
 	dq.entries = dq.entries[n:]
 
 	if len(fails) > 0 {
-		n -= len(fails)
-		for _, m := range fails {
-			log.Printf("Failed to delete message %s", aws.StringValue(m.Id))
-		}
+		dq.entries = append(dq.entries, fails...)
 	}
-	return n
 }
 
 func (dq *deleteQueue) start(ctx context.Context, wg *sync.WaitGroup) {

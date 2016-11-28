@@ -50,7 +50,7 @@ func (veq *visibilityExtenderQueue) removeFromPending(msg *sqs.Message) {
 	}
 }
 
-// extendBatch extends the visibility of up to 10 messages and returns the list of messages that failed to extend and an error for overall failure.
+// extendBatch extends the visibility of a batch of messages and returns the list of messages that failed to extend and an error for overall failure.
 func (veq *visibilityExtenderQueue) extendBatch(msgs []*sqs.Message) ([]*sqs.Message, error) {
 	if len(msgs) == 0 {
 		return nil, nil
@@ -131,7 +131,7 @@ func (veq *visibilityExtenderQueue) start(ctx context.Context) {
 		veq.Lock()
 		n := len(veq.entries)
 		veq.Unlock()
-		if n <= 0 {
+		if n == 0 {
 			return
 		}
 	}
