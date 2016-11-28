@@ -54,13 +54,8 @@ func main() {
 	mt := expvar.NewFloat(fmt.Sprintf("%s.time", queueName))
 	track := middleware.TrackMetrics(ms, mf, mt)
 
-	// set up middleware stack for each consumer
-	delCtx, cancelDelete := context.WithCancel(context.Background())
-	stack := middleware.DefaultStack(delCtx, s)
-
 	// wrap the handler
-	stack = append(stack, track)
-	handler := middleware.ApplyDecoratorsToHandler(processMessage, stack...)
+	handler := middleware.ApplyDecoratorsToHandler(processMessage, track)
 
 	// start the consumers
 	log.Println("Starting queue consumers")
@@ -81,9 +76,6 @@ func main() {
 
 	// wait for all the consumers to exit cleanly
 	wg.Wait()
-
-	// and only then shut down the deleter
-	cancelDelete()
 	log.Println("Shutdown complete")
 }
 
