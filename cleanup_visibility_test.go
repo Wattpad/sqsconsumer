@@ -57,7 +57,7 @@ func TestQueueConsumerExtendsLongJobs(t *testing.T) {
 		return nil
 	}
 
-	s := &SQSService{Svc: m}
+	s := &SQSService{Svc: m, Logger: NoopLogger}
 	q := NewConsumer(s, fn)
 	q.DeleteMessageAccumulatorTimeout = 10 * time.Millisecond
 	q.DeleteMessageDrainTimeout = 100 * time.Millisecond

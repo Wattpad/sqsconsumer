@@ -1,7 +1,6 @@
 package sqsconsumer
 
 import (
-	"log"
 	"sync"
 	"time"
 
@@ -19,13 +18,19 @@ func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 		delayAfterReceiveError:         defaultDelayAfterReceiveError,
 		WaitSeconds:                    defaultReceiveMessageWaitSeconds,
 		ReceiveVisibilityTimoutSeconds: defaultReceiveVisibilityTimeoutSeconds,
-		Logger: log.Printf, // or no-op?
+		Logger: NoopLogger,
 
 		ExtendVisibilityTimeoutBySeconds: defaultExtendVisibilityBySeconds,
 		ExtendVisibilityTimeoutEvery:     defaultExtendVisibilityEvery,
 		DeleteMessageAccumulatorTimeout:  defaultDeleteAccumulatorTimeout,
 		DeleteMessageDrainTimeout:        defaultDeleteMessageDrainTimeout,
 	}
+}
+
+// SetLogger sets the consumer and service loggers to a function similar to fmt.Printf
+func (mf *Consumer) SetLogger(fn func(format string, args ...interface{})) {
+	mf.Logger = fn
+	mf.s.Logger = fn
 }
 
 func (mf *Consumer) startWorkers(ctx context.Context, jobs <-chan job, wg *sync.WaitGroup) {
@@ -133,7 +138,6 @@ func (mf *Consumer) Run(ctx context.Context) error {
 		// Stop if the context was cancelled
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping worker")
 			close(jobs)
 			wg.Wait()
 			cleanupCancel()

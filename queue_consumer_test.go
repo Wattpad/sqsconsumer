@@ -54,7 +54,7 @@ func TestQueueConsumerRunProcessesMessages(t *testing.T) {
 		return nil
 	}
 
-	s := &SQSService{Svc: m}
+	s := &SQSService{Svc: m, Logger: NoopLogger}
 	q := NewConsumer(s, fn)
 	q.delayAfterReceiveError = time.Millisecond
 	q.DeleteMessageDrainTimeout = 25 * time.Millisecond
@@ -113,7 +113,7 @@ func TestQueueConsumerRunDoesNotFetchMoreMessagesThanItCanProcess(t *testing.T) 
 		return nil
 	}
 
-	s := &SQSService{Svc: m}
+	s := &SQSService{Svc: m, Logger: NoopLogger}
 	q := NewConsumer(s, fn)
 	q.delayAfterReceiveError = time.Millisecond
 	q.DeleteMessageDrainTimeout = 25 * time.Millisecond
@@ -151,7 +151,7 @@ func TestQueueConsumerRunStopsGracefullyWhenCancelled(t *testing.T) {
 	m.EXPECT().DeleteMessageBatch(gomock.Any()).AnyTimes().Return(&sqs.DeleteMessageBatchOutput{}, nil)
 	m.EXPECT().ChangeMessageVisibilityBatch(gomock.Any()).AnyTimes()
 
-	s := &SQSService{Svc: m}
+	s := &SQSService{Svc: m, Logger: NoopLogger}
 	q := NewConsumer(s, noop)
 	q.delayAfterReceiveError = time.Millisecond
 
@@ -187,7 +187,7 @@ func TestQueueConsumerRunRetriesOnErrors(t *testing.T) {
 	m.EXPECT().ReceiveMessage(gomock.Any()).Do(delay).Return(nil, assert.AnError).AnyTimes()
 	m.EXPECT().DeleteMessageBatch(gomock.Any()).AnyTimes().Return(&sqs.DeleteMessageBatchOutput{}, nil)
 	m.EXPECT().ChangeMessageVisibilityBatch(gomock.Any()).AnyTimes()
-	s := &SQSService{Svc: m}
+	s := &SQSService{Svc: m, Logger: NoopLogger}
 
 	q := NewConsumer(s, noop)
 	q.delayAfterReceiveError = time.Millisecond

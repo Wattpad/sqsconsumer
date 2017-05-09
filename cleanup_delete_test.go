@@ -68,7 +68,7 @@ func TestQueueConsumerDeletesOnSuccess(t *testing.T) {
 		return nil
 	}
 
-	s := &SQSService{Svc: m}
+	s := &SQSService{Svc: m, Logger: NoopLogger}
 	q := NewConsumer(s, fn)
 	q.DeleteMessageAccumulatorTimeout = time.Millisecond
 	q.DeleteMessageDrainTimeout = 100 * time.Millisecond
@@ -136,7 +136,7 @@ func TestQueueConsumerDoesNotDeleteOnFailure(t *testing.T) {
 		return assert.AnError
 	}
 
-	s := &SQSService{Svc: m}
+	s := &SQSService{Svc: m, Logger: NoopLogger}
 	q := NewConsumer(s, fn)
 	q.DeleteMessageAccumulatorTimeout = time.Millisecond
 	q.DeleteMessageDrainTimeout = 100 * time.Millisecond

@@ -1,7 +1,6 @@
 package sqsconsumer
 
 import (
-	"log"
 	"sync"
 	"time"
 
@@ -14,8 +13,7 @@ type deleteQueue struct {
 	sync.Mutex
 	entries []*sqs.DeleteMessageBatchRequestEntry
 
-	svc                 SQSAPI
-	url                 *string
+	svc                 *SQSService
 	drainTimeout        time.Duration
 	accumulationTimeout time.Duration
 }
@@ -23,8 +21,7 @@ type deleteQueue struct {
 // NewBatchDeleter starts a batch deleter routine that deletes messages after they are sent to the returned channel
 func NewBatchDeleter(ctx context.Context, wg *sync.WaitGroup, s *SQSService, every, drainTimeout time.Duration) chan<- *sqs.Message {
 	dq := &deleteQueue{
-		svc:                 s.Svc,
-		url:                 s.URL,
+		svc:                 s,
 		accumulationTimeout: every,
 		drainTimeout:        drainTimeout,
 		queue:               make(chan *sqs.Message),
@@ -53,13 +50,13 @@ func (dq *deleteQueue) addToPendingDeletes(msg *sqs.Message) {
 // deleteBatch deletes a batch of messages and returns the list of messages that failed to delete or an error for overall failure.
 func (dq *deleteQueue) deleteBatch(msgs []*sqs.DeleteMessageBatchRequestEntry) ([]*sqs.DeleteMessageBatchRequestEntry, error) {
 	req := &sqs.DeleteMessageBatchInput{
-		QueueUrl: dq.url,
+		QueueUrl: dq.svc.URL,
 		Entries:  msgs,
 	}
 
-	resp, err := dq.svc.DeleteMessageBatch(req)
+	resp, err := dq.svc.Svc.DeleteMessageBatch(req)
 	if err != nil {
-		log.Println("Error deleting messages:", err)
+		dq.svc.Logger("Error deleting messages: %s", err)
 		return nil, err
 	}
 
@@ -86,7 +83,7 @@ func (dq *deleteQueue) deleteFromPending() {
 	}
 	fails, err := dq.deleteBatch(dq.entries[:n])
 	if err != nil {
-		log.Printf("Error deleting batch: %s", err)
+		dq.svc.Logger("Error deleting batch: %s", err)
 		return
 	}
 
