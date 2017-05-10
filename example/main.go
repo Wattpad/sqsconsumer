@@ -66,6 +66,7 @@ func main() {
 		go func() {
 			// create the consumer and bind it to a queue and processor function
 			c := sqsconsumer.NewConsumer(s, handler)
+			c.SetLogger(log.Printf)
 
 			// start running the consumer with a context that will be cancelled when a graceful shutdown is requested
 			c.Run(fetchCtx)

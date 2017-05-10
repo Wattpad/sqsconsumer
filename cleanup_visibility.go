@@ -1,7 +1,6 @@
 package sqsconsumer
 
 import (
-	"log"
 	"sync"
 	"time"
 
@@ -15,8 +14,7 @@ type visibilityExtenderQueue struct {
 	sync.Mutex
 	entries []*sqs.Message
 
-	svc           SQSAPI
-	url           *string
+	svc           *SQSService
 	extensionSecs int64
 	ticker        <-chan time.Time
 }
@@ -27,8 +25,7 @@ func NewBatchVisibilityExtender(ctx context.Context, s *SQSService, ticker <-cha
 	copy(entries, pending)
 
 	veq := &visibilityExtenderQueue{
-		svc:           s.Svc,
-		url:           s.URL,
+		svc:           s,
 		ticker:        ticker,
 		extensionSecs: extensionSecs,
 		queue:         make(chan *sqs.Message, len(pending)),
@@ -58,7 +55,7 @@ func (veq *visibilityExtenderQueue) extendBatch(msgs []*sqs.Message) ([]*sqs.Mes
 
 	var entries []*sqs.ChangeMessageVisibilityBatchRequestEntry
 	for _, m := range msgs {
-		log.Println("Extending visibility timeout for message", aws.StringValue(m.MessageId))
+		veq.svc.Logger("Extending visibility timeout for message %s", aws.StringValue(m.MessageId))
 		entries = append(entries, &sqs.ChangeMessageVisibilityBatchRequestEntry{
 			Id:                m.MessageId,
 			ReceiptHandle:     m.ReceiptHandle,
@@ -67,12 +64,11 @@ func (veq *visibilityExtenderQueue) extendBatch(msgs []*sqs.Message) ([]*sqs.Mes
 	}
 
 	p := &sqs.ChangeMessageVisibilityBatchInput{
-		QueueUrl: veq.url,
+		QueueUrl: veq.svc.URL,
 		Entries:  entries,
 	}
-	resp, err := veq.svc.ChangeMessageVisibilityBatch(p)
+	resp, err := veq.svc.Svc.ChangeMessageVisibilityBatch(p)
 	if err != nil {
-		log.Println("Error extending messages:", err)
 		return msgs, err
 	}
 
@@ -95,7 +91,7 @@ func (veq *visibilityExtenderQueue) extendPending() {
 
 	fails, err := veq.extendBatch(veq.entries)
 	if err != nil {
-		log.Printf("Error extending batch: %s", err)
+		veq.svc.Logger("Error extending batch: %s", err)
 	}
 
 	var retries uint
@@ -104,7 +100,7 @@ func (veq *visibilityExtenderQueue) extendPending() {
 		time.Sleep(time.Duration((2<<retries)*50) * time.Millisecond)
 		fails, err = veq.extendBatch(fails)
 		if err != nil {
-			log.Printf("Error extending batch: %s", err)
+			veq.svc.Logger("Error extending batch: %s", err)
 		}
 	}
 }

@@ -14,7 +14,10 @@ func SQSServiceForQueue(queueName string, opts ...AWSConfigOption) (*SQSService,
 	}
 
 	svc := sqs.New(session.New(conf))
-	s := &SQSService{Svc: svc}
+	s := &SQSService{
+		Svc:    svc,
+		Logger: NoopLogger,
+	}
 
 	var url *string
 	var err error
@@ -36,8 +39,9 @@ func OptAWSRegion(region string) AWSConfigOption {
 
 // SQSService links an SQS client with a queue URL.
 type SQSService struct {
-	Svc SQSAPI
-	URL *string
+	Svc    SQSAPI
+	URL    *string
+	Logger func(format string, args ...interface{})
 }
 
 // SetupQueue creates the queue to listen on and returns the URL.
@@ -64,3 +68,5 @@ func SetupQueue(svc SQSAPI, name string) (*string, error) {
 
 	return createResp.QueueUrl, nil
 }
+
+func NoopLogger(_ string, _ ...interface{}) {}
