@@ -6,6 +6,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
+func MockSQSServiceForQueue(opts ...AWSConfigOption) (*SQSService, error) {
+
+}
+
 // SQSServiceForQueue creates an AWS SQS client configured for the given region and gets or creates a queue with the given name.
 func SQSServiceForQueue(queueName string, opts ...AWSConfigOption) (*SQSService, error) {
 	conf := &aws.Config{}
