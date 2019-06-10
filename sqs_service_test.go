@@ -5,10 +5,30 @@ import (
 
 	"github.com/Wattpad/sqsconsumer/mock"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestSQSForQueue(t *testing.T) {
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+
+	name := "fake_queue_name"
+	region := "us-east-1"
+	conf := &aws.Config{
+		Region: &region,
+	}
+
+	svc := sqs.New(session.New(conf))
+
+	service, err := MockSQSServiceForQueue(name, svc)
+
+	assert.Nil(t, err)
+	assert.Equal(t, svc, service.Svc)
+
+}
 
 func TestSetupQueueExists(t *testing.T) {
 	ctl := gomock.NewController(t)
