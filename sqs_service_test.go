@@ -10,22 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSQSForQueue(t *testing.T) {
-	ctl := gomock.NewController(t)
-	defer ctl.Finish()
-
-	name := "fake_queue_name"
-
-	svc := mock.NewMockSQSAPI(ctl)
-	svc.EXPECT().GetQueueUrl(&sqs.GetQueueUrlInput{QueueName: aws.String(name)}).Return(&sqs.GetQueueUrlOutput{QueueUrl: aws.String("http://example.com/queue/" + name)}, nil)
-	
-	service, err := SQSObjectForQueue(name, svc)
-
-	assert.Nil(t, err)
-	assert.Equal(t, svc, service.Svc)
-
-}
-
 func TestSetupQueueExists(t *testing.T) {
 	ctl := gomock.NewController(t)
 	defer ctl.Finish()
