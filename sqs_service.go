@@ -6,8 +6,23 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
-func MockSQSServiceForQueue(opts ...AWSConfigOption) (*SQSService, error) {
+// Takes SQS type as an argument so the library may be mocked and tested locally
+func MockSQSServiceForQueue(queueName string, svc *sqs.SQS) (*SQSService, error) {
 
+	s := &SQSService{
+		Svc:    svc,
+		Logger: NoopLogger,
+	}
+
+	var url *string
+	var err error
+
+	if url, err = SetupQueue(svc, queueName); err != nil {
+		return nil, err
+	}
+	s.URL = url
+
+	return s, nil
 }
 
 // SQSServiceForQueue creates an AWS SQS client configured for the given region and gets or creates a queue with the given name.
