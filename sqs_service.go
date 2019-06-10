@@ -7,7 +7,7 @@ import (
 )
 
 // Takes SQS type as an argument so the library may be mocked and tested locally
-func MockSQSServiceForQueue(queueName string, svc *sqs.SQS) (*SQSService, error) {
+func SQSObjectForQueue(queueName string, svc SQSAPI) (*SQSService, error) {
 
 	s := &SQSService{
 		Svc:    svc,
