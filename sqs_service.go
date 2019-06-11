@@ -33,19 +33,7 @@ func SQSServiceForQueue(queueName string, opts ...AWSConfigOption) (*SQSService,
 	}
 
 	svc := sqs.New(session.New(conf))
-	s := &SQSService{
-		Svc:    svc,
-		Logger: NoopLogger,
-	}
-
-	var url *string
-	var err error
-	if url, err = SetupQueue(svc, queueName); err != nil {
-		return nil, err
-	}
-	s.URL = url
-
-	return s, nil
+	return SQSObjectForQueue(queueName, svc)
 }
 
 type AWSConfigOption func(*aws.Config)
