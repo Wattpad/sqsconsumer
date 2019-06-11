@@ -6,6 +6,25 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
+// Takes SQS type as an argument so the library may be mocked and tested locally
+func NewSQSService(queueName string, svc SQSAPI) (*SQSService, error) {
+
+	s := &SQSService{
+		Svc:    svc,
+		Logger: NoopLogger,
+	}
+
+	var url *string
+	var err error
+
+	if url, err = SetupQueue(svc, queueName); err != nil {
+		return nil, err
+	}
+	s.URL = url
+
+	return s, nil
+}
+
 // SQSServiceForQueue creates an AWS SQS client configured for the given region and gets or creates a queue with the given name.
 func SQSServiceForQueue(queueName string, opts ...AWSConfigOption) (*SQSService, error) {
 	conf := &aws.Config{}
@@ -14,19 +33,7 @@ func SQSServiceForQueue(queueName string, opts ...AWSConfigOption) (*SQSService,
 	}
 
 	svc := sqs.New(session.New(conf))
-	s := &SQSService{
-		Svc:    svc,
-		Logger: NoopLogger,
-	}
-
-	var url *string
-	var err error
-	if url, err = SetupQueue(svc, queueName); err != nil {
-		return nil, err
-	}
-	s.URL = url
-
-	return s, nil
+	return NewSQSService(queueName, svc)
 }
 
 type AWSConfigOption func(*aws.Config)
