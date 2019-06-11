@@ -7,7 +7,7 @@ import (
 )
 
 // Takes SQS type as an argument so the library may be mocked and tested locally
-func SQSObjectForQueue(queueName string, svc SQSAPI) (*SQSService, error) {
+func NewSQSService(queueName string, svc SQSAPI) (*SQSService, error) {
 
 	s := &SQSService{
 		Svc:    svc,
@@ -33,7 +33,7 @@ func SQSServiceForQueue(queueName string, opts ...AWSConfigOption) (*SQSService,
 	}
 
 	svc := sqs.New(session.New(conf))
-	return SQSObjectForQueue(queueName, svc)
+	return NewSQSService(queueName, svc)
 }
 
 type AWSConfigOption func(*aws.Config)
