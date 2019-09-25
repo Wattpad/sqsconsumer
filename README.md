@@ -6,6 +6,18 @@
 
 See `example/main.go` for a simple demonstration.
 
+# AWS IAM
+
+sqs-consumer requires IAM permissions for the following SQS API actions:
+
+* sqs:ChangeMessageVisibility
+* sqs:ChangeMessageVisibilityBatch
+* sqs:DeleteMessage
+* sqs:DeleteMessageBatch
+* sqs:GetQueueAttributes
+* sqs:GetQueueUrl
+* sqs:ReceiveMessage
+
 # TODO
 
 - Terminate ReceiveMessage early if the Context is cancelled during long polling (see https://github.com/aws/aws-sdk-go/issues/75)
