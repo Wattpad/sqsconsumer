@@ -1,7 +1,6 @@
 package sqsconsumer
 
 import (
-	"errors"
 	"sync"
 	"time"
 
@@ -15,8 +14,6 @@ import (
 func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 	return &Consumer{
 		s:                              s,
-		shutDown:                       make(chan struct{}),
-		shutDownLock:                   &sync.Mutex{},
 		handler:                        handler,
 		delayAfterReceiveError:         defaultDelayAfterReceiveError,
 		WaitSeconds:                    defaultReceiveMessageWaitSeconds,
@@ -100,8 +97,10 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, don
 		select {
 		case <-ctx.Done():
 			return
-		case <-done:
-			return
+		case _, open := <-done:
+			if !open {
+				return
+			}
 		default:
 		}
 
@@ -130,18 +129,12 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, don
 
 // Run starts the Consumer, stopping it when the given context is cancelled.
 // To shut down without canceling the Context, and allow in-flight messages to drain,
-// call ShutDown.
+// use the WithShutdownChan RunOption.
 //
-// If ShutDown has been called before Run, the returned error is ErrConsumerAlreadyShutDown.
 // If the context is canceled, the returned error is the context's error.
-// If in-flight messages drain to completion, the returned error is nil.
-func (mf *Consumer) Run(ctx context.Context) error {
-	select {
-	case <-mf.shutDown:
-		return ErrConsumerAlreadyShutDown
-	default:
-	}
-
+// If in-flight messages drain to completion after shutdown, the returned error is nil.
+func (mf *Consumer) Run(ctx context.Context, opts ...RunOption) error {
+	runOptions := resolveRunOptions(opts)
 	wg := &sync.WaitGroup{}
 	jobs := make(chan job)
 	mf.startWorkers(ctx, jobs, wg)
@@ -151,7 +144,7 @@ func (mf *Consumer) Run(ctx context.Context) error {
 	del := NewBatchDeleter(cleanupCtx, cleanupWG, mf.s, mf.DeleteMessageAccumulatorTimeout, mf.DeleteMessageDrainTimeout)
 
 	messages := make(chan job)
-	go mf.receiveMessages(cleanupCtx, cleanupWG, mf.shutDown, messages, del)
+	go mf.receiveMessages(cleanupCtx, cleanupWG, runOptions.shutDown, messages, del)
 	defer func() {
 		close(jobs)
 		wg.Wait()
@@ -177,20 +170,12 @@ func (mf *Consumer) Run(ctx context.Context) error {
 	}
 }
 
-// ShutDown initiates the graceful shutdown of the consumer by stopping the ReceiveMessage loop
-// and allowing any in-flight handlers to finish processing.
-//
-// The context can be canceled during this time to abort pending operations early.  This is done co-operatively
-// and requires the provided handler func to honour the context cancelation.
-func (mf *Consumer) ShutDown() {
-	mf.shutDownLock.Lock()
-	defer mf.shutDownLock.Unlock()
-
-	select {
-	case <-mf.shutDown:
-	default:
-		close(mf.shutDown)
+func resolveRunOptions(opts []RunOption) *runOpts {
+	opt := &runOpts{}
+	for _, fn := range opts {
+		fn(opt)
 	}
+	return opt
 }
 
 type job struct {
@@ -202,10 +187,6 @@ type result struct {
 	msg     *sqs.Message
 	success bool
 }
-
-var (
-	ErrConsumerAlreadyShutDown = errors.New("consumer is already shut down")
-)
 
 const (
 	defaultDelayAfterReceiveError          = 5 * time.Second
@@ -223,8 +204,6 @@ const (
 // Consumer is an SQS queue consumer
 type Consumer struct {
 	s                              *SQSService
-	shutDown                       chan struct{}
-	shutDownLock                   sync.Locker
 	handler                        MessageHandlerFunc
 	delayAfterReceiveError         time.Duration
 	Logger                         func(string, ...interface{})

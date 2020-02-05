@@ -225,10 +225,15 @@ func TestQueueConsumerRunDrainsOnShutdown(t *testing.T) {
 	h := &handler{}
 	q := NewConsumer(&SQSService{Svc: m, Logger: NoopLogger}, h.HandleMessage)
 
+	shutDown := make(chan struct{})
+
 	m.EXPECT().
 		ReceiveMessage(gomock.Any()).
 		Do(func(*sqs.ReceiveMessageInput) {
-			q.ShutDown()
+			if shutDown != nil {
+				close(shutDown)
+				shutDown = nil
+			}
 		}).
 		Return(received, nil).
 		AnyTimes()
@@ -238,7 +243,7 @@ func TestQueueConsumerRunDrainsOnShutdown(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := q.Run(ctx)
+	err := q.Run(ctx, WithShutdownChan(shutDown))
 	assert.NoError(t, err)
 
 	expected := []string{"b01", "b02", "b03", "b04", "b05"}
@@ -261,10 +266,15 @@ func TestQueueConsumerRunHonorsContextOnShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	shutDown := make(chan struct{})
+
 	m.EXPECT().
 		ReceiveMessage(gomock.Any()).
 		Do(func(*sqs.ReceiveMessageInput) {
-			q.ShutDown()
+			if shutDown != nil {
+				close(shutDown)
+				shutDown = nil
+			}
 			cancel()
 		}).
 		Return(
@@ -280,25 +290,8 @@ func TestQueueConsumerRunHonorsContextOnShutdown(t *testing.T) {
 	m.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil).AnyTimes()
 	m.EXPECT().ChangeMessageVisibilityBatch(gomock.Any()).AnyTimes()
 
-	err := q.Run(ctx)
+	err := q.Run(ctx, WithShutdownChan(shutDown))
 	assert.Equal(t, context.Canceled, err)
-}
-
-func TestQueueConsumerRunReturnsErrorAfterShutdown(t *testing.T) {
-	ctl := gomock.NewController(t)
-	defer ctl.Finish()
-
-	handler := func(ctx context.Context, _ string) error {
-		return nil
-	}
-
-	m := mock.NewMockSQSAPI(ctl)
-	q := NewConsumer(&SQSService{Svc: m, Logger: NoopLogger}, handler)
-
-	q.ShutDown()
-
-	err := q.Run(context.Background())
-	assert.Equal(t, ErrConsumerAlreadyShutDown, err)
 }
 
 func noop(ctx context.Context, msg string) error {
