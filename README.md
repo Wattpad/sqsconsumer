@@ -20,30 +20,37 @@ sqs-consumer requires IAM permissions for the following SQS API actions:
 
 # Shutting down gracefully
 
-Canceling the context passed to the `Run` method will propagate cancelation to all running handlers, likely preventing them from completing their task.
-To have `sqsconsumer` stop consuming messages while still allowing the in-flight handlers to complete their work, you may call the `ShutDown` method.
+Canceling the context passed to the `Run` method will propagate cancelation to all running handlers, likely preventing them from completing their task.  To have `sqsconsumer` stop consuming messages while still allowing the in-flight handlers to complete their work, you may provide an optional `shutDown` channel.
 
 Example:
 
 ```go
-  shutDown := make(chan struct{})
-  // ... set up shutdown signaling, service, and handler ...
-
-  c := sqsconsumer.NewConsumer(service, handler)
-
   ctx, cancel := context.WithCancel(context.Background())
   defer cancel()
 
-  go func() {
-      <-shutDown
-      c.ShutDown()
+  shutDown := make(chan struct{})
+  // ... Set up shutdown signaling, service, and handler ...
+  // shutDown will be closed when it's time to shut down
 
-      // Force shutdown via Context after 30 seconds
-      time.AfterFunc(30*time.Second, cancel)
-  }()
+  c := sqsconsumer.NewConsumer(service, handler)
 
-  err := c.Run(ctx)
-  // handle error
+	wg := &sync.WaitGroup{}
+	for i := 0; i < numFetchers; i++ {
+    wg.Add(1)
+		go func() {
+      // Consumer will stop when shutDown is closed
+      err := c.Run(ctx, sqsconsumer.WithShutdownChan(shutDown))
+      // Handle error
+			wg.Done()
+		}()
+	}
+
+  <-shutDown
+  // Force shutdown after deadline
+	time.AfterFunc(30*time.Second, cancel)
+
+	// Wait for all the consumers to exit cleanly
+	wg.Wait()
 ```
 
 # TODO
