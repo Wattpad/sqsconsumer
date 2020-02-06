@@ -102,10 +102,8 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, don
 		select {
 		case <-ctx.Done():
 			return
-		case _, open := <-done:
-			if !open {
-				return
-			}
+		case <-done:
+			return
 		default:
 		}
 
@@ -142,10 +140,8 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, don
 func (mf *Consumer) Run(ctx context.Context, opts ...RunOption) error {
 	ro := resolveRunOptions(opts)
 	select {
-	case _, open := <-ro.shutDown:
-		if !open {
-			return ErrShutdownChannelClosed
-		}
+	case <-ro.shutDown:
+		return ErrShutdownChannelClosed
 	default:
 	}
 
