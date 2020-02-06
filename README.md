@@ -34,23 +34,23 @@ Example:
 
   c := sqsconsumer.NewConsumer(service, handler)
 
-	wg := &sync.WaitGroup{}
-	for i := 0; i < numFetchers; i++ {
+  wg := &sync.WaitGroup{}
+  for i := 0; i < numFetchers; i++ {
     wg.Add(1)
-		go func() {
+    go func() {
       // Consumer will stop when shutDown is closed
       err := c.Run(ctx, sqsconsumer.WithShutdownChan(shutDown))
       // Handle error
-			wg.Done()
-		}()
-	}
+      wg.Done()
+    }()
+  }
 
   <-shutDown
   // Force shutdown after deadline
-	time.AfterFunc(30*time.Second, cancel)
+  time.AfterFunc(30*time.Second, cancel)
 
-	// Wait for all the consumers to exit cleanly
-	wg.Wait()
+  // Wait for all the consumers to exit cleanly
+  wg.Wait()
 ```
 
 # TODO
