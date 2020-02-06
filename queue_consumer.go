@@ -1,6 +1,7 @@
 package sqsconsumer
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -8,6 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"golang.org/x/net/context"
+)
+
+var (
+	ErrShutdownChannelClosed = errors.New("shutDown channel is already closed")
 )
 
 // NewConsumer creates a Consumer that uses the given SQSService to connect and invokes the handler for each message received.
@@ -132,9 +137,18 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, don
 // use the WithShutdownChan RunOption.
 //
 // If the context is canceled, the returned error is the context's error.
+// If the optional shutDown channel is closed before Run is called, the returned error is ErrShutdownChannelClosed.
 // If in-flight messages drain to completion after shutdown, the returned error is nil.
 func (mf *Consumer) Run(ctx context.Context, opts ...RunOption) error {
-	runOptions := resolveRunOptions(opts)
+	ro := resolveRunOptions(opts)
+	select {
+	case _, open := <-ro.shutDown:
+		if !open {
+			return ErrShutdownChannelClosed
+		}
+	default:
+	}
+
 	wg := &sync.WaitGroup{}
 	jobs := make(chan job)
 	mf.startWorkers(ctx, jobs, wg)
@@ -144,7 +158,7 @@ func (mf *Consumer) Run(ctx context.Context, opts ...RunOption) error {
 	del := NewBatchDeleter(cleanupCtx, cleanupWG, mf.s, mf.DeleteMessageAccumulatorTimeout, mf.DeleteMessageDrainTimeout)
 
 	messages := make(chan job)
-	go mf.receiveMessages(cleanupCtx, cleanupWG, runOptions.shutDown, messages, del)
+	go mf.receiveMessages(cleanupCtx, cleanupWG, ro.shutDown, messages, del)
 	defer func() {
 		close(jobs)
 		wg.Wait()

@@ -294,6 +294,22 @@ func TestQueueConsumerRunHonorsContextOnShutdown(t *testing.T) {
 	assert.Equal(t, context.Canceled, err)
 }
 
+func TestQueueConsumerRunReturnsErrorAfterShutdown(t *testing.T) {
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+
+	handler := func(context.Context, string) error { return nil }
+
+	m := mock.NewMockSQSAPI(ctl)
+	q := NewConsumer(&SQSService{Svc: m, Logger: NoopLogger}, handler)
+
+	shutDown := make(chan struct{})
+	close(shutDown)
+
+	err := q.Run(context.Background(), WithShutdownChan(shutDown))
+	assert.Equal(t, ErrShutdownChannelClosed, err)
+}
+
 func noop(ctx context.Context, msg string) error {
 	return nil
 }
