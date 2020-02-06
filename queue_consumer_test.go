@@ -1,6 +1,8 @@
 package sqsconsumer
 
 import (
+	"sort"
+	"sync"
 	"testing"
 
 	"time"
@@ -205,6 +207,126 @@ func TestQueueConsumerRunRetriesOnErrors(t *testing.T) {
 	assert.InDelta(t, ngo, runtime.NumGoroutine(), 2, "Should not leak goroutines")
 }
 
+func TestQueueConsumerRunDrainsOnShutdown(t *testing.T) {
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+
+	received := &sqs.ReceiveMessageOutput{
+		Messages: []*sqs.Message{
+			&sqs.Message{MessageId: aws.String("i1"), ReceiptHandle: aws.String("r1"), Body: aws.String("b01")},
+			&sqs.Message{MessageId: aws.String("i2"), ReceiptHandle: aws.String("r2"), Body: aws.String("b02")},
+			&sqs.Message{MessageId: aws.String("i3"), ReceiptHandle: aws.String("r3"), Body: aws.String("b03")},
+			&sqs.Message{MessageId: aws.String("i4"), ReceiptHandle: aws.String("r4"), Body: aws.String("b04")},
+			&sqs.Message{MessageId: aws.String("i5"), ReceiptHandle: aws.String("r5"), Body: aws.String("b05")},
+		},
+	}
+
+	m := mock.NewMockSQSAPI(ctl)
+	h := &handler{}
+	q := NewConsumer(&SQSService{Svc: m, Logger: NoopLogger}, h.HandleMessage)
+
+	shutDown := make(chan struct{})
+
+	m.EXPECT().
+		ReceiveMessage(gomock.Any()).
+		Do(func(*sqs.ReceiveMessageInput) {
+			if shutDown != nil {
+				close(shutDown)
+				shutDown = nil
+			}
+		}).
+		Return(received, nil).
+		AnyTimes()
+	m.EXPECT().DeleteMessageBatch(gomock.Any()).AnyTimes().Return(&sqs.DeleteMessageBatchOutput{}, nil)
+	m.EXPECT().ChangeMessageVisibilityBatch(gomock.Any()).AnyTimes()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := q.Run(ctx, WithShutdownChan(shutDown))
+	assert.NoError(t, err)
+
+	expected := []string{"b01", "b02", "b03", "b04", "b05"}
+	sort.Strings(h.messages)
+	assert.Equal(t, expected, h.messages)
+}
+
+func TestQueueConsumerRunHonorsContextOnShutdown(t *testing.T) {
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+
+	handler := func(ctx context.Context, _ string) error {
+		assert.Error(t, ctx.Err())
+		return nil
+	}
+
+	m := mock.NewMockSQSAPI(ctl)
+	q := NewConsumer(&SQSService{Svc: m, Logger: NoopLogger}, handler)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	shutDown := make(chan struct{})
+
+	m.EXPECT().
+		ReceiveMessage(gomock.Any()).
+		Do(func(*sqs.ReceiveMessageInput) {
+			if shutDown != nil {
+				close(shutDown)
+				shutDown = nil
+			}
+			cancel()
+		}).
+		Return(
+			&sqs.ReceiveMessageOutput{
+				Messages: []*sqs.Message{
+					&sqs.Message{MessageId: aws.String("i1"), ReceiptHandle: aws.String("r1"), Body: aws.String("b01")},
+					&sqs.Message{MessageId: aws.String("i2"), ReceiptHandle: aws.String("r2"), Body: aws.String("b02")},
+					&sqs.Message{MessageId: aws.String("i3"), ReceiptHandle: aws.String("r3"), Body: aws.String("b03")},
+				},
+			},
+			nil).
+		AnyTimes()
+	m.EXPECT().DeleteMessageBatch(gomock.Any()).Return(&sqs.DeleteMessageBatchOutput{}, nil).AnyTimes()
+	m.EXPECT().ChangeMessageVisibilityBatch(gomock.Any()).AnyTimes()
+
+	err := q.Run(ctx, WithShutdownChan(shutDown))
+	assert.Equal(t, context.Canceled, err)
+}
+
+func TestQueueConsumerRunReturnsErrorAfterShutdown(t *testing.T) {
+	ctl := gomock.NewController(t)
+	defer ctl.Finish()
+
+	handler := func(context.Context, string) error { return nil }
+
+	m := mock.NewMockSQSAPI(ctl)
+	q := NewConsumer(&SQSService{Svc: m, Logger: NoopLogger}, handler)
+
+	shutDown := make(chan struct{})
+	close(shutDown)
+
+	err := q.Run(context.Background(), WithShutdownChan(shutDown))
+	assert.Equal(t, ErrShutdownChannelClosed, err)
+}
+
 func noop(ctx context.Context, msg string) error {
+	return nil
+}
+
+type handler struct {
+	lock     sync.Mutex
+	messages []string
+}
+
+func (h *handler) HandleMessage(ctx context.Context, msg string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	h.messages = append(h.messages, msg)
 	return nil
 }

@@ -18,6 +18,41 @@ sqs-consumer requires IAM permissions for the following SQS API actions:
 * sqs:GetQueueUrl
 * sqs:ReceiveMessage
 
+# Shutting down gracefully
+
+Canceling the context passed to the `Run` method will propagate cancelation to all running handlers, likely preventing them from completing their task.  To have `sqsconsumer` stop consuming messages while still allowing the in-flight handlers to complete their work, you may provide an optional `shutDown` channel.
+
+Example:
+
+```go
+  ctx, cancel := context.WithCancel(context.Background())
+  defer cancel()
+
+  shutDown := make(chan struct{})
+  // ... Set up shutdown signaling, service, and handler ...
+  // shutDown will be closed when it's time to shut down
+
+  c := sqsconsumer.NewConsumer(service, handler)
+
+  wg := &sync.WaitGroup{}
+  for i := 0; i < numFetchers; i++ {
+    wg.Add(1)
+    go func() {
+      // Consumer will stop when shutDown is closed
+      err := c.Run(ctx, sqsconsumer.WithShutdownChan(shutDown))
+      // Handle error
+      wg.Done()
+    }()
+  }
+
+  <-shutDown
+  // Force shutdown after deadline
+  time.AfterFunc(30*time.Second, cancel)
+
+  // Wait for all the consumers to exit cleanly
+  wg.Wait()
+```
+
 # TODO
 
 - Terminate ReceiveMessage early if the Context is cancelled during long polling (see https://github.com/aws/aws-sdk-go/issues/75)

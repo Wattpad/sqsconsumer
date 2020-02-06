@@ -1,6 +1,7 @@
 package sqsconsumer
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -8,6 +9,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"golang.org/x/net/context"
+)
+
+var (
+	ErrShutdownChannelClosed = errors.New("shutDown channel is already closed")
 )
 
 // NewConsumer creates a Consumer that uses the given SQSService to connect and invokes the handler for each message received.
@@ -18,7 +23,7 @@ func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 		delayAfterReceiveError:         defaultDelayAfterReceiveError,
 		WaitSeconds:                    defaultReceiveMessageWaitSeconds,
 		ReceiveVisibilityTimoutSeconds: defaultReceiveVisibilityTimeoutSeconds,
-		Logger: NoopLogger,
+		Logger:                         NoopLogger,
 
 		ExtendVisibilityTimeoutBySeconds: defaultExtendVisibilityBySeconds,
 		ExtendVisibilityTimeoutEvery:     defaultExtendVisibilityEvery,
@@ -82,7 +87,9 @@ func (mf *Consumer) startBatchExtender(ctx context.Context, wg *sync.WaitGroup, 
 	return results
 }
 
-func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, ch chan<- job, dq chan<- *sqs.Message) {
+func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, done <-chan struct{}, ch chan<- job, dq chan<- *sqs.Message) {
+	defer close(ch)
+
 	rcvParams := &sqs.ReceiveMessageInput{
 		QueueUrl:            mf.s.URL,
 		MaxNumberOfMessages: aws.Int64(awsBatchSizeLimit),
@@ -94,6 +101,8 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, ch 
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-done:
 			return
 		default:
 		}
@@ -121,8 +130,21 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, ch 
 	}
 }
 
-// Run starts the Consumer, gracefully stopping it when the given context is cancelled.
-func (mf *Consumer) Run(ctx context.Context) error {
+// Run starts the Consumer, stopping it when the given context is cancelled.
+// To shut down without canceling the Context, and allow in-flight messages to drain,
+// use the WithShutdownChan RunOption.
+//
+// If the context is canceled, the returned error is the context's error.
+// If the optional shutDown channel is closed before Run is called, the returned error is ErrShutdownChannelClosed.
+// If in-flight messages drain to completion after shutdown, the returned error is nil.
+func (mf *Consumer) Run(ctx context.Context, opts ...RunOption) error {
+	ro := resolveRunOptions(opts)
+	select {
+	case <-ro.shutDown:
+		return ErrShutdownChannelClosed
+	default:
+	}
+
 	wg := &sync.WaitGroup{}
 	jobs := make(chan job)
 	mf.startWorkers(ctx, jobs, wg)
@@ -132,28 +154,38 @@ func (mf *Consumer) Run(ctx context.Context) error {
 	del := NewBatchDeleter(cleanupCtx, cleanupWG, mf.s, mf.DeleteMessageAccumulatorTimeout, mf.DeleteMessageDrainTimeout)
 
 	messages := make(chan job)
-	go mf.receiveMessages(cleanupCtx, cleanupWG, messages, del)
-	var done bool
+	go mf.receiveMessages(cleanupCtx, cleanupWG, ro.shutDown, messages, del)
+	defer func() {
+		close(jobs)
+		wg.Wait()
+		cleanupCancel()
+		cleanupWG.Wait()
+	}()
+
 	for {
 		// Stop if the context was cancelled
 		select {
 		case <-ctx.Done():
-			close(jobs)
-			wg.Wait()
-			cleanupCancel()
-			cleanupWG.Wait()
 			return ctx.Err()
-		case msg := <-messages:
-			if done {
-				break
+		case msg, ok := <-messages:
+			if !ok {
+				return nil
 			}
 			select {
 			case <-ctx.Done():
-				done = true
+				return ctx.Err()
 			case jobs <- msg:
 			}
 		}
 	}
+}
+
+func resolveRunOptions(opts []RunOption) *runOpts {
+	opt := &runOpts{}
+	for _, fn := range opts {
+		fn(opt)
+	}
+	return opt
 }
 
 type job struct {

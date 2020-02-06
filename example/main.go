@@ -37,14 +37,14 @@ func main() {
 		log.Fatalf("Could not set up queue '%s': %s", queueName, err)
 	}
 
-	// set up a context which will gracefully cancel the worker on interrupt
-	fetchCtx, cancelFetch := context.WithCancel(context.Background())
+	shutDown := make(chan struct{})
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt, os.Kill)
+
 	go func() {
 		<-term
 		log.Println("Starting graceful shutdown")
-		cancelFetch()
+		close(shutDown)
 	}()
 
 	// set up metrics - note TrackMetrics does not run the http server, and uses expvar
@@ -60,20 +60,24 @@ func main() {
 	// start the consumers
 	log.Println("Starting queue consumers")
 
+	// create the consumer and bind it to a queue and processor function
+	c := sqsconsumer.NewConsumer(s, handler)
+	c.SetLogger(log.Printf)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	wg := &sync.WaitGroup{}
 	wg.Add(numFetchers)
 	for i := 0; i < numFetchers; i++ {
 		go func() {
-			// create the consumer and bind it to a queue and processor function
-			c := sqsconsumer.NewConsumer(s, handler)
-			c.SetLogger(log.Printf)
-
-			// start running the consumer with a context that will be cancelled when a graceful shutdown is requested
-			c.Run(fetchCtx)
-
+			c.Run(ctx, sqsconsumer.WithShutdownChan(shutDown))
 			wg.Done()
 		}()
 	}
+
+	<-shutDown
+	time.AfterFunc(30*time.Second, cancel)
 
 	// wait for all the consumers to exit cleanly
 	wg.Wait()
