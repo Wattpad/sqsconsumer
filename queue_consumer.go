@@ -91,11 +91,12 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, don
 	defer close(ch)
 
 	rcvParams := &sqs.ReceiveMessageInput{
-		QueueUrl:            mf.s.URL,
-		MaxNumberOfMessages: aws.Int64(awsBatchSizeLimit),
-		WaitTimeSeconds:     aws.Int64(mf.WaitSeconds),
-		VisibilityTimeout:   aws.Int64(mf.ReceiveVisibilityTimoutSeconds),
-		AttributeNames:      []*string{aws.String("SentTimestamp"), aws.String("ApproximateReceiveCount")},
+		QueueUrl:               mf.s.URL,
+		MaxNumberOfMessages:    aws.Int64(awsBatchSizeLimit),
+		WaitTimeSeconds:        aws.Int64(mf.WaitSeconds),
+		VisibilityTimeout:      aws.Int64(mf.ReceiveVisibilityTimoutSeconds),
+		AttributeNames:         []*string{aws.String("SentTimestamp"), aws.String("ApproximateReceiveCount")},
+		MessageAttributeNames:  []*string{aws.String("All")},
 	}
 
 	for {
