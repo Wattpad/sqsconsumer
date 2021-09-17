@@ -32,8 +32,12 @@ func SQSServiceForQueue(queueName string, opts ...AWSConfigOption) (*SQSService,
 		o(conf)
 	}
 
-	svc := sqs.New(session.New(conf))
-	return NewSQSService(queueName, svc)
+	sess, err := session.NewSession(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewSQSService(queueName, sqs.New(sess))
 }
 
 type AWSConfigOption func(*aws.Config)
