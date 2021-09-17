@@ -10,5 +10,7 @@ import (
 )
 
 func TestSQSInterfaceImplementsSQSAPI(t *testing.T) {
-	assert.Implements(t, (*sqsconsumer.SQSAPI)(nil), sqs.New(session.New()))
+	sess, err := session.NewSession()
+	assert.NoError(t, err)
+	assert.Implements(t, (*sqsconsumer.SQSAPI)(nil), sqs.New(sess))
 }
