@@ -18,13 +18,13 @@ var (
 // NewConsumer creates a Consumer that uses the given SQSService to connect and invokes the handler for each message received.
 func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 	return &Consumer{
-		s:                              s,
-		handler:                        handler,
-		delayAfterReceiveError:         defaultDelayAfterReceiveError,
-		WaitSeconds:                    defaultReceiveMessageWaitSeconds,
-		ReceiveVisibilityTimoutSeconds: defaultReceiveVisibilityTimeoutSeconds,
-		Logger:                         NoopLogger,
-
+		s:                                s,
+		handler:                          handler,
+		Logger:                           NoopLogger,
+		JobWorkersCount:                  defaultJobWorkersCount,
+		delayAfterReceiveError:           defaultDelayAfterReceiveError,
+		WaitSeconds:                      defaultReceiveMessageWaitSeconds,
+		ReceiveVisibilityTimoutSeconds:   defaultReceiveVisibilityTimeoutSeconds,
 		ExtendVisibilityTimeoutBySeconds: defaultExtendVisibilityBySeconds,
 		ExtendVisibilityTimeoutEvery:     defaultExtendVisibilityEvery,
 		DeleteMessageAccumulatorTimeout:  defaultDeleteAccumulatorTimeout,
@@ -39,7 +39,7 @@ func (mf *Consumer) SetLogger(fn func(format string, args ...interface{})) {
 }
 
 func (mf *Consumer) startWorkers(ctx context.Context, jobs <-chan job, wg *sync.WaitGroup) {
-	for i := 0; i < awsBatchSizeLimit; i++ {
+	for i := 0; i < mf.JobWorkersCount; i++ {
 		wg.Add(1)
 		go func() {
 			for j := range jobs {
@@ -92,7 +92,7 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, don
 
 	rcvParams := &sqs.ReceiveMessageInput{
 		QueueUrl:            mf.s.URL,
-		MaxNumberOfMessages: aws.Int64(awsBatchSizeLimit),
+		MaxNumberOfMessages: aws.Int64(defaultMessagesBatchSizeLimit),
 		WaitTimeSeconds:     aws.Int64(mf.WaitSeconds),
 		VisibilityTimeout:   aws.Int64(mf.ReceiveVisibilityTimoutSeconds),
 		AttributeNames:      []*string{aws.String("SentTimestamp"), aws.String("ApproximateReceiveCount")},
@@ -198,6 +198,7 @@ type result struct {
 	success bool
 }
 
+// AWS SQS defaults
 const (
 	defaultDelayAfterReceiveError          = 5 * time.Second
 	defaultReceiveVisibilityTimeoutSeconds = 30
@@ -205,21 +206,24 @@ const (
 	defaultExtendVisibilityEvery           = 30 * time.Second
 	defaultDeleteAccumulatorTimeout        = 250 * time.Millisecond
 	defaultDeleteMessageDrainTimeout       = time.Second
+	defaultReceiveMessageWaitSeconds       = 20
+	defaultMessagesBatchSizeLimit          = 10
+)
 
-	// AWS maximums
-	awsBatchSizeLimit                = 10
-	defaultReceiveMessageWaitSeconds = 20
+const (
+	// default number of concurrent goroutines processing SQS messages by calling Consumer.handler
+	defaultJobWorkersCount = 10
 )
 
 // Consumer is an SQS queue consumer
 type Consumer struct {
-	s                              *SQSService
-	handler                        MessageHandlerFunc
-	delayAfterReceiveError         time.Duration
-	Logger                         func(string, ...interface{})
-	WaitSeconds                    int64
-	ReceiveVisibilityTimoutSeconds int64
-
+	s                                *SQSService
+	handler                          MessageHandlerFunc
+	Logger                           func(string, ...interface{})
+	delayAfterReceiveError           time.Duration
+	JobWorkersCount                  int
+	WaitSeconds                      int64
+	ReceiveVisibilityTimoutSeconds   int64
 	ExtendVisibilityTimeoutBySeconds int64
 	ExtendVisibilityTimeoutEvery     time.Duration
 	DeleteMessageAccumulatorTimeout  time.Duration

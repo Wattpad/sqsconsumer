@@ -78,8 +78,8 @@ func (dq *deleteQueue) deleteFromPending() {
 	defer dq.Unlock()
 
 	n := len(dq.entries)
-	if n > awsBatchSizeLimit {
-		n = awsBatchSizeLimit
+	if n > defaultMessagesBatchSizeLimit {
+		n = defaultMessagesBatchSizeLimit
 	}
 	fails, err := dq.deleteBatch(dq.entries[:n])
 	if err != nil {
@@ -105,7 +105,7 @@ func (dq *deleteQueue) start(ctx context.Context, wg *sync.WaitGroup) {
 			dq.Lock()
 			n := len(dq.entries)
 			dq.Unlock()
-			if n >= awsBatchSizeLimit {
+			if n >= defaultMessagesBatchSizeLimit {
 				dq.deleteFromPending()
 			}
 		case <-time.After(dq.accumulationTimeout):
