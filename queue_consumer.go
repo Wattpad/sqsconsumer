@@ -223,7 +223,7 @@ type Consumer struct {
 	Logger  func(string, ...interface{})
 
 	JobWorkersCount                  int
-	MessagesBatchSizeLimit           int64
+	MessagesBatchSizeLimit           int64 // The maximum number of messages to return is 10.
 	WaitSeconds                      int64
 	ReceiveVisibilityTimoutSeconds   int64
 	ExtendVisibilityTimeoutBySeconds int64
