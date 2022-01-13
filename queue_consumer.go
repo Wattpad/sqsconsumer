@@ -22,13 +22,14 @@ func NewConsumer(s *SQSService, handler MessageHandlerFunc) *Consumer {
 		handler:                          handler,
 		Logger:                           NoopLogger,
 		JobWorkersCount:                  defaultJobWorkersCount,
-		delayAfterReceiveError:           defaultDelayAfterReceiveError,
+		MessagesBatchSizeLimit:           defaultMessagesBatchSizeLimit,
 		WaitSeconds:                      defaultReceiveMessageWaitSeconds,
 		ReceiveVisibilityTimoutSeconds:   defaultReceiveVisibilityTimeoutSeconds,
 		ExtendVisibilityTimeoutBySeconds: defaultExtendVisibilityBySeconds,
 		ExtendVisibilityTimeoutEvery:     defaultExtendVisibilityEvery,
 		DeleteMessageAccumulatorTimeout:  defaultDeleteAccumulatorTimeout,
 		DeleteMessageDrainTimeout:        defaultDeleteMessageDrainTimeout,
+		delayAfterReceiveError:           defaultDelayAfterReceiveError,
 	}
 }
 
@@ -92,7 +93,7 @@ func (mf *Consumer) receiveMessages(ctx context.Context, wg *sync.WaitGroup, don
 
 	rcvParams := &sqs.ReceiveMessageInput{
 		QueueUrl:            mf.s.URL,
-		MaxNumberOfMessages: aws.Int64(defaultMessagesBatchSizeLimit),
+		MaxNumberOfMessages: aws.Int64(mf.MessagesBatchSizeLimit),
 		WaitTimeSeconds:     aws.Int64(mf.WaitSeconds),
 		VisibilityTimeout:   aws.Int64(mf.ReceiveVisibilityTimoutSeconds),
 		AttributeNames:      []*string{aws.String("SentTimestamp"), aws.String("ApproximateReceiveCount")},
@@ -151,7 +152,7 @@ func (mf *Consumer) Run(ctx context.Context, opts ...RunOption) error {
 
 	cleanupWG := &sync.WaitGroup{}
 	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
-	del := NewBatchDeleter(cleanupCtx, cleanupWG, mf.s, mf.DeleteMessageAccumulatorTimeout, mf.DeleteMessageDrainTimeout)
+	del := NewBatchDeleter(cleanupCtx, cleanupWG, mf, mf.DeleteMessageAccumulatorTimeout, mf.DeleteMessageDrainTimeout)
 
 	messages := make(chan job)
 	go mf.receiveMessages(cleanupCtx, cleanupWG, ro.shutDown, messages, del)
@@ -217,15 +218,18 @@ const (
 
 // Consumer is an SQS queue consumer
 type Consumer struct {
-	s                                *SQSService
-	handler                          MessageHandlerFunc
-	Logger                           func(string, ...interface{})
-	delayAfterReceiveError           time.Duration
+	s       *SQSService
+	handler MessageHandlerFunc
+	Logger  func(string, ...interface{})
+
 	JobWorkersCount                  int
+	MessagesBatchSizeLimit           int64
 	WaitSeconds                      int64
 	ReceiveVisibilityTimoutSeconds   int64
 	ExtendVisibilityTimeoutBySeconds int64
-	ExtendVisibilityTimeoutEvery     time.Duration
-	DeleteMessageAccumulatorTimeout  time.Duration
-	DeleteMessageDrainTimeout        time.Duration
+
+	delayAfterReceiveError          time.Duration
+	ExtendVisibilityTimeoutEvery    time.Duration
+	DeleteMessageAccumulatorTimeout time.Duration
+	DeleteMessageDrainTimeout       time.Duration
 }

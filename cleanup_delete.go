@@ -16,15 +16,18 @@ type deleteQueue struct {
 	svc                 *SQSService
 	drainTimeout        time.Duration
 	accumulationTimeout time.Duration
+
+	messagesBatchSize int
 }
 
 // NewBatchDeleter starts a batch deleter routine that deletes messages after they are sent to the returned channel
-func NewBatchDeleter(ctx context.Context, wg *sync.WaitGroup, s *SQSService, every, drainTimeout time.Duration) chan<- *sqs.Message {
+func NewBatchDeleter(ctx context.Context, wg *sync.WaitGroup, c *Consumer, every, drainTimeout time.Duration) chan<- *sqs.Message {
 	dq := &deleteQueue{
-		svc:                 s,
+		svc:                 c.s,
 		accumulationTimeout: every,
 		drainTimeout:        drainTimeout,
 		queue:               make(chan *sqs.Message),
+		messagesBatchSize:   int(c.MessagesBatchSizeLimit),
 	}
 	wg.Add(1)
 	go dq.start(ctx, wg)
@@ -78,8 +81,8 @@ func (dq *deleteQueue) deleteFromPending() {
 	defer dq.Unlock()
 
 	n := len(dq.entries)
-	if n > defaultMessagesBatchSizeLimit {
-		n = defaultMessagesBatchSizeLimit
+	if n > dq.messagesBatchSize {
+		n = dq.messagesBatchSize
 	}
 	fails, err := dq.deleteBatch(dq.entries[:n])
 	if err != nil {
@@ -105,7 +108,7 @@ func (dq *deleteQueue) start(ctx context.Context, wg *sync.WaitGroup) {
 			dq.Lock()
 			n := len(dq.entries)
 			dq.Unlock()
-			if n >= defaultMessagesBatchSizeLimit {
+			if n >= dq.messagesBatchSize {
 				dq.deleteFromPending()
 			}
 		case <-time.After(dq.accumulationTimeout):
