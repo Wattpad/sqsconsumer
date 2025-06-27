@@ -66,7 +66,12 @@ func (mf *Consumer) startBatchExtender(ctx context.Context, wg *sync.WaitGroup, 
 	go func() {
 		defer wg.Done()
 		ticker := time.NewTicker(mf.ExtendVisibilityTimeoutEvery)
-		ext := NewBatchVisibilityExtender(ctx, mf.s, ticker.C, mf.ExtendVisibilityTimeoutBySeconds, pending)
+		defer ticker.Stop()
+
+		extCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		ext := NewBatchVisibilityExtender(extCtx, mf.s, ticker.C, mf.ExtendVisibilityTimeoutBySeconds, pending)
 
 		left := len(pending)
 		for left > 0 {
@@ -78,7 +83,6 @@ func (mf *Consumer) startBatchExtender(ctx context.Context, wg *sync.WaitGroup, 
 				ext <- r.msg
 				left--
 			case <-ctx.Done():
-				ticker.Stop()
 				return
 			}
 		}
